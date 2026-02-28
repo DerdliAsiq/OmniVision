@@ -1,0 +1,12 @@
+# --- AELSA DEFENCE SECURITY SHIELD ---
+# Sanal Ortam ve Önbellekler
+venv/
+__pycache__/
+*.pyc
+
+# Yapay Zeka Ağırlık Dosyaları (Büyük dosyalar)
+*.pt
+
+# Güvenlik ve Sırlar
+token.txt
+.env
