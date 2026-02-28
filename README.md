@@ -7,9 +7,9 @@ Aelsa-OmniVision, kritik tesislerin ve operasyonel sahaların otonom gözetlenme
 
 Sistem, "Edge AI" prensipleriyle tasarlanmış olup iki ana çekirdekten oluşur:
 
-    Omni-Engine: Donanım farkındalığına (Hardware-Aware) sahip, asenkron görüntü yakalama motoru. Raspberry Pi 5 (V4L2) ve RTX 2050 (CUDA) sistemlerinde otomatik optimizasyon sağlar.
+    Omni-Engine: Donanım farkındalığına (Hardware-Aware) sahip, asenkron görüntü yakalama motoru. Raspberry Pi 5 (V4L2) ve RTX 2050 (CUDA) sistemlerinde otomatik optimizasyon sağlar. Adaptif buffer yönetimi ile frame kaybı minimalize edilmiştir.
 
-    Neural-Shield: YOLOv8-Nano ve Supervision entegrasyonu ile donatılmış analiz katmanı. Sektör standardı annotator'lar ile yüksek doğruluklu etiketleme ve izleme gerçekleştirir.
+    Neural-Shield: YOLOv8-Nano modeli ile donatılmış analiz katmanı. Gerçek zamanlı nesne tespiti ve takip (BYTETRACK) yeteneğine sahiptir. İleri dönemü Supervision entegrasyonu planlanmaktadır.
 
 Donanım Uyumluluk Matrisi
 Bileşen	Raspberry Pi 5 (ARM64)	PC Workstation (x86_64)
@@ -32,6 +32,18 @@ source venv/bin/activate
 
 # Bağımlılıkları yükle
 pip install -r requirements.txt
+
+# Ana uygulamayı çalıştır
+python main.py
+
+## Bağımlılıklar
+
+Proje aşağıdaki temel bağımlılıklara ihtiyaç duyar:
+- **ultralytics**: YOLOv8 modelleri ve tracking
+- **opencv-python**: Görüntü işleme
+- **torch**: YOLOv8 çıkarsaması için derin öğrenme
+- **psutil**: Sistem performansı izleme
+- **numpy**: Sayısal işlemler
 
 🔒 Lisans ve Gizlilik (Proprietary)
 
