@@ -7,8 +7,7 @@ from omni_ui import TacticalUI
 from config import SystemState
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+logger = logging.getLogger("AelsaOmniVision")
 def main():
     print("[+] Aelsa-OmniVision V1.2 Başlatılıyor...")
     
@@ -52,8 +51,6 @@ def main():
             
             # 2. FPS Hesaplama
             new_time = time.time()
-            fps = 1 / (new_time - prev_time) if (new_time - prev_time) > 0 else 0
-            prev_time = new_time
             
             # 3. Arayüz Katmanı (Sağdaki Dashboard'u çizer)
             final_frame = ui.draw_dashboard(processed_frame, fps)
@@ -73,6 +70,8 @@ def main():
                 SystemState.LIDAR_ACTIVE = not SystemState.LIDAR_ACTIVE
             elif key == ord('p'): # Performans paneli aç/kapat
                 SystemState.SHOW_PERFORMANCE = not SystemState.SHOW_PERFORMANCE
+            elif key == ord('h'): # Ufuk Çizgisi Taramasını aç/kapat
+                SystemState.HORIZON_SCAN_ACTIVE = not SystemState.HORIZON_SCAN_ACTIVE
 
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")

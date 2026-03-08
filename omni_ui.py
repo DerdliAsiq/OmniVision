@@ -40,6 +40,8 @@ class TacticalUI:
         self._draw_status(canvas, "Tracking (T)", SystemState.TRACKING_ACTIVE, start_x, y_offset)
         y_offset += 25
         self._draw_status(canvas, "LiDAR Sensor (L)", SystemState.LIDAR_ACTIVE, start_x, y_offset)
+        y_offset += 25
+        self._draw_status(canvas, "Horizon Scan (H)", SystemState.HORIZON_SCAN_ACTIVE, start_x, y_offset)
         y_offset += 40
 
         # --- BÖLÜM 2: LIDAR TELEMETRİSİ ---
