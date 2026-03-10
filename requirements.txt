@@ -1,7 +1,10 @@
-opencv-python==4.8.1.78
-ultralytics==8.0.202
-torch==2.1.1
-torchvision==0.16.1
-torchaudio==2.1.1
-numpy==1.24.3
-psutil==5.9.6
+# requirements for OmniVision project
+
+opencv-python
+ultralytics
+torch
+psutil
+numpy
+supervision
+fastapi
+uvicorn

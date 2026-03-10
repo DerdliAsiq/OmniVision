@@ -25,14 +25,12 @@ class HorizonScanner:
             horizontal_lines = []
             for line in lines:
                 x1, y1, x2, y2 = line[0]
-                # Dalga toleransı için açı hesapla
                 angle = np.abs(np.arctan2(y2 - y1, x2 - x1) * 180.0 / np.pi)
                 if angle < 15 or angle > 165: 
                     horizontal_lines.append(line[0])
 
             if horizontal_lines:
-                # Orijinal boyuta geri oranla (* 2)
                 avg_y = int(np.mean([max(l[1], l[3]) for l in horizontal_lines])) * 2
-                horizon_y = max(0, avg_y - 30) # 30 px güvenlik payı bırak
+                horizon_y = max(0, avg_y - 30) # 30 px güvenlik payı
 
         return horizon_y

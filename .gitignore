@@ -1,4 +1,4 @@
-# --- AELSA DEFENCE SECURITY SHIELD ---
+# --- TACTICALVISION SECURITY SHIELD ---
 # Sanal Ortam ve Önbellekler
 venv/
 __pycache__/
@@ -6,6 +6,9 @@ __pycache__/
 
 # Yapay Zeka Ağırlık Dosyaları (Büyük dosyalar)
 *.pt
+
+# Veritabanı ve Yerel Loglar
+*.db
 
 # Güvenlik ve Sırlar
 token.txt

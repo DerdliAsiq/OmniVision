@@ -8,7 +8,7 @@ class SystemState:
     TRACKING_ACTIVE = True      # 't' tuşu
     SHOW_PERFORMANCE = True     # 'p' tuşu
     LIDAR_ACTIVE = False        # 'l' tuşu
-    HORIZON_SCAN_ACTIVE = True  # 'h' tuşu - YENİ: Ufuk Çizgisi Modu
+    HORIZON_SCAN_ACTIVE = True  # 'h' tuşu - Ufuk Çizgisi Modu
     
     # Donanım Durumları
-    MOCK_LIDAR_DISTANCE = Bi git amk # Metre (Sensör gelene kadar simülasyon)
+    MOCK_LIDAR_DISTANCE = 5.0  # Metre (sensör gelene kadar simülasyon)
