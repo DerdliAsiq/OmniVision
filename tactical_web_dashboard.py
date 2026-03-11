@@ -1,153 +1,95 @@
 import sqlite3
-import uvicorn
+import cv2
+import threading
 import os
+import asyncio
+import subprocess
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
+from pydantic import BaseModel
+from config import SystemState
 
-app = FastAPI(title="OmniVision Modern HUD")
+app = FastAPI(title="OmniVision C2 Merkezi")
 DB_NAME = "tactical_vision.db"
 
-html_content = """
-<!DOCTYPE html>
-<html lang="tr" data-theme="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OmniVision | Log Center</title>
-    <style>
-        :root[data-theme="dark"] {
-            --bg-color: #121212; --panel-bg: #1e1e1e; --text-main: #f5f5f5;
-            --border: #333; --primary: #3b82f6; --danger: #ef4444;
-        }
-        :root[data-theme="light"] {
-            --bg-color: #f3f4f6; --panel-bg: #ffffff; --text-main: #1f2937;
-            --border: #e5e7eb; --primary: #2563eb; --danger: #dc2626;
-        }
-        body {
-            background-color: var(--bg-color); color: var(--text-main);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0; padding: 20px; transition: all 0.3s ease;
-        }
-        .container { max-width: 1200px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .controls { 
-            background: var(--panel-bg); padding: 15px; border-radius: 8px; 
-            border: 1px solid var(--border); display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;
-        }
-        input, select, button {
-            padding: 10px; border-radius: 6px; border: 1px solid var(--border);
-            background: var(--bg-color); color: var(--text-main); font-size: 14px; outline: none;
-        }
-        button { cursor: pointer; font-weight: bold; border: none; transition: 0.2s; }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-danger { background: var(--danger); color: white; }
-        .btn-theme { background: transparent; border: 1px solid var(--border); font-size: 18px; }
-        
-        table { width: 100%; border-collapse: collapse; background: var(--panel-bg); border-radius: 8px; overflow: hidden; }
-        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border); }
-        th { background: rgba(59, 130, 246, 0.1); color: var(--primary); font-weight: 600; }
-        .live-dot { width: 10px; height: 10px; background: #10b981; border-radius: 50%; display: inline-block; animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0.4; } }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h2><span class="live-dot"></span> OmniVision İstihbarat Merkezi</h2>
-            <div>
-                <button class="btn-theme" onclick="toggleTheme()" id="theme-btn">☀️</button>
-                <button class="btn-danger" onclick="wipeDB()">🗑️ Veritabanını Temizle</button>
-            </div>
-        </div>
+# --- CANLI YAYIN (MJPEG STREAMING) TAMPONU ---
+latest_frame = None
+frame_lock = threading.Lock()
 
-        <div class="controls">
-            <input type="text" id="searchInput" placeholder="ID veya Nesne ara..." onkeyup="filterTable()">
-            <select id="confFilter" onchange="filterTable()">
-                <option value="0">Tüm Güven Skorları</option>
-                <option value="50">> %50 Güven</option>
-                <option value="80">> %80 Güven</option>
-            </select>
-        </div>
+def update_video_frame(frame):
+    """main.py'den gelen son görüntüyü web sunucusunun tamponuna yazar."""
+    global latest_frame
+    with frame_lock:
+        latest_frame = frame.copy()
 
-        <table id="logTable">
-            <thead>
-                <tr>
-                    <th>Zaman</th>
-                    <th>ID</th>
-                    <th>Nesne (Label)</th>
-                    <th>Güven Skoru</th>
-                    <th>Koordinat (X, Y)</th>
-                </tr>
-            </thead>
-            <tbody id="tableBody"></tbody>
-        </table>
-    </div>
-
-    <script>
-        let allData = [];
-
-        function toggleTheme() {
-            const html = document.documentElement;
-            const btn = document.getElementById('theme-btn');
-            if(html.getAttribute('data-theme') === 'dark') {
-                html.setAttribute('data-theme', 'light');
-                btn.innerText = '🌙';
-            } else {
-                html.setAttribute('data-theme', 'dark');
-                btn.innerText = '☀️';
-            }
-        }
-
-        async function fetchLogs() {
-            try {
-                const res = await fetch('/api/logs');
-                allData = await res.json();
-                filterTable(); 
-            } catch (err) { console.error("Veri çekilemedi", err); }
-        }
-
-        function filterTable() {
-            const searchText = document.getElementById('searchInput').value.toLowerCase();
-            const minConf = parseInt(document.getElementById('confFilter').value);
+async def video_generator():
+    """Web tarayıcısına ASENKRON (Low-Latency) video akışı sağlar."""
+    global latest_frame
+    while True:
+        if latest_frame is None:
+            await asyncio.sleep(0.1) 
+            continue
             
-            const tbody = document.getElementById('tableBody');
-            let newHTML = '';
+        with frame_lock:
+            frame_to_encode = latest_frame
+            
+        ret, buffer = cv2.imencode('.jpg', frame_to_encode, [cv2.IMWRITE_JPEG_QUALITY, 65])
+        
+        if not ret:
+            await asyncio.sleep(0.03)
+            continue
+            
+        frame_bytes = buffer.tobytes()
+        
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        
+        await asyncio.sleep(0.03)
 
-            allData.forEach(row => {
-                const confPercent = Math.round(row[4] * 100);
-                const searchMatch = row[2].toString().includes(searchText) || row[3].toLowerCase().includes(searchText);
-                const confMatch = confPercent >= minConf;
+@app.get("/video_feed")
+async def video_feed():
+    return StreamingResponse(video_generator(), media_type="multipart/x-mixed-replace; boundary=frame")
 
-                if(searchMatch && confMatch) {
-                    newHTML += `<tr>
-                        <td>${row[1]}</td>
-                        <td><strong>#${row[2]}</strong></td>
-                        <td style="text-transform: capitalize;">${row[3]}</td>
-                        <td>%${confPercent}</td>
-                        <td>${row[5]}, ${row[6]}</td>
-                    </tr>`;
-                }
-            });
-            tbody.innerHTML = newHTML;
-        }
 
-        async function wipeDB() {
-            if(confirm("Tüm loglar kalıcı olarak silinecektir. Emin misiniz?")) {
-                await fetch('/api/wipe', { method: 'DELETE' });
-                fetchLogs(); 
-            }
-        }
+# --- API UZAKTAN KUMANDA VE OS SES KONTROLÜ ---
+class CommandData(BaseModel):
+    action: str
+    payload: list = None
 
-        setInterval(fetchLogs, 1000);
-        window.onload = fetchLogs;
-    </script>
-</body>
-</html>
-"""
+@app.post("/api/command")
+async def execute_command(cmd: CommandData):
+    action = cmd.action
+    
+    # 1. Radar Kontrolleri
+    if action == "toggle_alarm":
+        SystemState.ALARM_MODE = not SystemState.ALARM_MODE
+    elif action == "toggle_hud":
+        SystemState.SHOW_DASHBOARD = not SystemState.SHOW_DASHBOARD
+    elif action == "toggle_track":
+        SystemState.TRACKING_ACTIVE = not SystemState.TRACKING_ACTIVE
+    elif action == "toggle_horizon":
+        SystemState.HORIZON_SCAN_ACTIVE = not SystemState.HORIZON_SCAN_ACTIVE
+    elif action == "set_targets" and cmd.payload is not None:
+        SystemState.ACTIVE_TARGET_IDS = cmd.payload
+        SystemState.ACTIVE_TARGET_NAMES = [SystemState.MODEL_CLASSES[i].upper() for i in cmd.payload]
+        
+    # 2. İşletim Sistemi Ses (Anti-Sabotaj) Kontrolleri - GARUDA LINUX UYUMLU (Saf Shell Modu)
+    elif action == "vol_up":
+        subprocess.Popen("pactl set-sink-volume @DEFAULT_SINK@ +10%", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif action == "vol_down":
+        subprocess.Popen("pactl set-sink-volume @DEFAULT_SINK@ -10%", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif action == "vol_mute":
+        subprocess.Popen("pactl set-sink-mute @DEFAULT_SINK@ toggle", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif action == "vol_max":
+        # Önce sessizi kaldır (unmute), sonra %100'e daya
+        subprocess.Popen("pactl set-sink-mute @DEFAULT_SINK@ 0", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen("pactl set-sink-volume @DEFAULT_SINK@ 100%", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+    return {"status": "success", "action": action}
 
-@app.get("/", response_class=HTMLResponse)
-async def serve_dashboard():
-    return html_content
+@app.get("/api/classes")
+async def get_model_classes():
+    return SystemState.MODEL_CLASSES
 
 @app.get("/api/logs")
 async def get_logs():
@@ -172,6 +114,183 @@ async def wipe_database():
         conn.close()
     return {"status": "cleared"}
 
-if __name__ == "__main__":
-    print("[+] Modern OmniVision Web Sunucusu Başlatılıyor...")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# --- SİBERPUNK WEB ARAYÜZÜ (HTML/JS) ---
+html_content = """
+<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OmniVision | C2 Command</title>
+    <style>
+        :root[data-theme="dark"] {
+            --bg-color: #0a0a0a; --panel-bg: #141414; --text-main: #00ff00;
+            --border: #333; --primary: #8b0000; --danger: #ef4444; --accent: #00ffff;
+        }
+        body {
+            background-color: var(--bg-color); color: var(--text-main);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0; padding: 15px;
+        }
+        .header { display: flex; justify-content: space-between; border-bottom: 2px solid var(--border); padding-bottom: 10px; margin-bottom: 15px; }
+        .live-dot { width: 12px; height: 12px; background: #ef4444; border-radius: 50%; display: inline-block; animation: blink 1s infinite; margin-right: 10px; }
+        @keyframes blink { 50% { opacity: 0.3; } }
+        
+        .tabs { display: flex; gap: 10px; margin-bottom: 15px; }
+        .tab-btn { background: var(--panel-bg); color: var(--text-main); border: 1px solid var(--border); padding: 10px 20px; cursor: pointer; font-weight: bold; }
+        .tab-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .grid-container { display: grid; grid-template-columns: 3fr 1fr; gap: 15px; }
+        .video-feed { width: 100%; border: 2px solid var(--border); border-radius: 4px; background: #000; }
+        .control-panel { background: var(--panel-bg); border: 1px solid var(--border); padding: 15px; }
+        
+        button.cmd-btn { width: 100%; padding: 12px; margin-bottom: 10px; background: #222; color: #fff; border: 1px solid var(--accent); cursor: pointer; font-family: inherit; font-weight: bold; transition: 0.2s; }
+        button.cmd-btn:hover { background: var(--accent); color: #000; }
+        button.cmd-btn.alarm { border-color: var(--danger); }
+        button.cmd-btn.alarm:hover { background: var(--danger); color: #fff; }
+        button.cmd-btn.override { background: #450a0a; border-color: var(--danger); }
+        button.cmd-btn.override:hover { background: var(--danger); }
+        
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
+        select.target-select { width: 100%; height: 120px; background: #000; color: #00ff00; border: 1px solid var(--border); font-family: inherit; margin-bottom: 10px; }
+
+        table { width: 100%; border-collapse: collapse; background: var(--panel-bg); }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { color: var(--accent); }
+        
+        @media (max-width: 800px) { .grid-container { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2><span class="live-dot"></span> OMNIVISION C2 TERMINAL</h2>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('op-tab', this)">[ OPERASYON EKRANI ]</button>
+        <button class="tab-btn" onclick="switchTab('log-tab', this)">[ İSTİHBARAT LOGLARI ]</button>
+    </div>
+
+    <div id="op-tab" class="tab-content active">
+        <div class="grid-container">
+            <div>
+                <img id="videoStream" class="video-feed" src="/video_feed" alt="Video Sinyali Bekleniyor...">
+            </div>
+            <div class="control-panel">
+                <h3 style="margin-top:0; color:var(--accent);">RADAR KONTROLÜ</h3>
+                <button class="cmd-btn alarm" onclick="sendCommand('toggle_alarm')">🚨 ALARM (AÇ/KAPAT)</button>
+                <button class="cmd-btn" onclick="sendCommand('toggle_hud')">🖥️ HUD GİZLE/GÖSTER</button>
+                <button class="cmd-btn" onclick="sendCommand('toggle_track')">🎯 TAKİP SİSTEMİ</button>
+                <button class="cmd-btn" onclick="sendCommand('toggle_horizon')">🌊 UFUK ÇİZGİSİ</button>
+                
+                <hr style="border-color: var(--border); margin: 15px 0;">
+                
+                <h3 style="margin-top:0; color:var(--accent);">HEDEF SEÇİMİ (ÇOKLU)</h3>
+                <select id="targetSelect" class="target-select" multiple></select>
+                <button class="cmd-btn" onclick="setTargets()">>>> HEDEFLERİ KİLİTLE <<<</button>
+                
+                <hr style="border-color: var(--border); margin: 15px 0;">
+                
+                <h3 style="margin-top:0; color:var(--accent);">SİSTEM SESİ (ANTI-SABOTAJ)</h3>
+                <div class="grid-2">
+                    <button class="cmd-btn" onclick="sendCommand('vol_up')">🔊 +%10 SES</button>
+                    <button class="cmd-btn" onclick="sendCommand('vol_down')">🔉 -%10 SES</button>
+                </div>
+                <button class="cmd-btn" style="border-color: #a855f7;" onclick="sendCommand('vol_mute')">🔇 MUTE / UNMUTE</button>
+                <button class="cmd-btn override" onclick="sendCommand('vol_max')">⚠️ MAX SES (OVERRIDE)</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="log-tab" class="tab-content">
+        <button onclick="wipeDB()" style="padding:10px; background:var(--danger); color:white; border:none; cursor:pointer; margin-bottom:15px;">🗑️ VERİTABANINI TEMİZLE</button>
+        <table id="logTable">
+            <thead>
+                <tr>
+                    <th>Zaman</th><th>ID</th><th>Sınıf</th><th>Güven</th><th>Koor (X,Y)</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        function switchTab(tabId, btn) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            btn.classList.add('active');
+        }
+
+        async function sendCommand(action) {
+            await fetch('/api/command', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: action})
+            });
+        }
+
+        async function setTargets() {
+            const select = document.getElementById('targetSelect');
+            const selectedIds = Array.from(select.selectedOptions).map(opt => parseInt(opt.value));
+            if(selectedIds.length === 0) { alert("Lütfen en az bir hedef seçin!"); return; }
+            
+            await fetch('/api/command', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'set_targets', payload: selectedIds})
+            });
+            alert("Hedefler radara iletildi.");
+        }
+
+        async function loadClasses() {
+            const res = await fetch('/api/classes');
+            const classes = await res.json();
+            const select = document.getElementById('targetSelect');
+            
+            const sortedClasses = Object.entries(classes).sort((a, b) => a[1].localeCompare(b[1]));
+            
+            sortedClasses.forEach(([id, name]) => {
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.innerText = `[${id.padStart(2, '0')}] ${name.toUpperCase()}`;
+                select.appendChild(opt);
+            });
+        }
+
+        async function fetchLogs() {
+            try {
+                const res = await fetch('/api/logs');
+                const data = await res.json();
+                const tbody = document.getElementById('tableBody');
+                tbody.innerHTML = data.map(row => `
+                    <tr>
+                        <td>${row[1]}</td><td>#${row[2]}</td>
+                        <td>${row[3].toUpperCase()}</td><td>%${Math.round(row[4]*100)}</td>
+                        <td>${row[5]}, ${row[6]}</td>
+                    </tr>
+                `).join('');
+            } catch (err) {}
+        }
+
+        async function wipeDB() {
+            if(confirm("Tüm istihbarat logları silinecek. Onaylıyor musunuz?")) {
+                await fetch('/api/wipe', { method: 'DELETE' });
+                fetchLogs(); 
+            }
+        }
+
+        loadClasses();
+        setInterval(fetchLogs, 1500); 
+    </script>
+</body>
+</html>
+"""
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_dashboard():
+    return html_content

@@ -1,10 +1,10 @@
-# --- TACTICALVISION SECURITY SHIELD ---
+# --- OMNIVISION SECURITY SHIELD ---
 # Sanal Ortam ve Önbellekler
 venv/
 __pycache__/
 *.pyc
 
-# Yapay Zeka Ağırlık Dosyaları (Büyük dosyalar)
+# Yapay Zeka Ağırlık Dosyaları
 *.pt
 
 # Veritabanı ve Yerel Loglar

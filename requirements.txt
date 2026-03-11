@@ -8,3 +8,4 @@ numpy
 supervision
 fastapi
 uvicorn
+pygame

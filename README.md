@@ -1,69 +1,95 @@
-👁️ OmniVision v1.2
+# 👁️ OmniVision: Tactical C2 Edition
 
-State-of-the-Art Neural Surveillance & Tactical Analytics Platform
+**State-of-the-Art Neural Surveillance & Command Control Platform**
 
-OmniVision, kritik tesislerin ve operasyonel sahaların otonom gözetlenmesi için geliştirilmiş hibrit bir yapay zeka platformudur. DerdliAsiq tarafından açık kaynak dünyasına kazandırılan bu sistem; düşük gecikmeli nesne takibi, dinamik çevre güvenliği ve donanım hızlandırmalı analiz katmanlarını bir arada sunar.
-🛠️ Teknik Mimari ve Özellikler
+OmniVision, kritik tesislerin ve operasyonel sahaların otonom gözetlenmesi için geliştirilmiş hibrit bir yapay zeka platformudur. DerdliAsiq tarafından açık kaynak dünyasına kazandırılan bu sistem; düşük gecikmeli nesne takibi, dinamik çevre güvenliği ve donanım hızlandırmalı analiz katmanlarını bir arada sunar. 
 
-Sistem, "Edge AI" prensipleriyle tasarlanmış olup modern taktiksel operasyonlar için aşağıdaki çekirdeklerden oluşur:
+V1.2 güncellemeleriyle birlikte sistem, yerel bir tespit yazılımı olmaktan çıkmış; tam asenkron çalışan **C2 (Command & Control) Web Terminali** ile donatılmış gerçek bir uzaktan komuta merkezine dönüşmüştür.
 
-    Omni-Engine: Donanım farkındalığına (Hardware-Aware) sahip, asenkron görüntü yakalama motoru. Raspberry Pi 5 (V4L2) ve RTX 2050 (CUDA) sistemlerinde otomatik optimizasyon sağlar. Adaptif buffer yönetimi ile frame kaybı minimalize edilmiştir.
+---
 
-    Neural-Shield: YOLOv8 (Nano'dan Extra Large'a kadar ölçeklenebilir) modeli ve supervision kütüphanesi ile donatılmış analiz katmanı. Gerçek zamanlı nesne tespiti ve ByteTrack ile askeri standartlarda (Trace izi bırakan) hedef takibi yapar.
+## 🚨 Yeni Nesil Taktiksel Özellikler
 
-    Horizon Scanner (Ufuk Çizgisi Motoru): İnsansız Deniz Araçları (İDA) ve sallantılı kameralar için dinamik ufuk çizgisi tespiti yapar. Gökyüzünü tarama alanından (ROI) çıkararak işlemci tasarrufu sağlar.
+* **C2 Web Dashboard (Uzaktan Komuta):** FastAPI tabanlı, asenkron `asyncio` motoru ile çalışan modern kontrol paneli. Ana yapay zeka döngüsünü (OpenCV) yormadan, sıfır gecikmeli (low-latency) MJPEG canlı video akışı sağlar.
+* **Anti-Sabotaj Ses Protokolü (OS Override):** Garuda Linux (PipeWire/PulseAudio) çekirdeğine doğrudan hükmeden `pactl` entegrasyonu. Ana makine fiziki olarak sessize alınsa bile, uzaktan **MAX SES (OVERRIDE)** komutu ile sistemi %100 güçte tetikleme yeteneği.
+* **Kinetik Flaşör (Target Lock-on):** Radara giren tehditleri izlerken "tünel vizyonunu" önleyen çoklu tarama mimarisi. Seçili hedeflerin üzerine saniyede 6 kez Kırmızı/Siyah çakar (strobe) efekti ve taktiksel nişangah atarak operatörün dikkatini doğrudan merkeze çeker.
+* **Dinamik Hedef Seçim Radarı (Tkinter):** 80 farklı COCO sınıfı arasında anlık filtreleme yapabilen, A-Z alfabetik sıralı ve "Demir Hafızalı" (önceki seçimleri unutmayan) taktiksel hedef arayüzü.
+* **Akıllı Ses Kilidi (Smart Audio Lock):** Subprocess tabanlı akıllı alarm motoru. CPU'yu boğan kör döngüler yerine, seslerin üst üste binmesini (%0 overlap) fiziksel olarak engelleyen I/O optimizasyonu.
+* **Horizon Scanner (Ufuk Çizgisi Motoru):** İnsansız Deniz Araçları (İDA) ve stabil olmayan kameralar için dinamik ufuk çizgisi tespiti yapar. Gökyüzünü ROI (Region of Interest) alanından çıkararak işlemci gücünü maksimize eder.
 
-    Tactical Database: Asenkron SQLite veritabanı mimarisi (WAL modu) ve modern web tabanlı (FastAPI) HUD arayüzü ile anlık tehditleri loglar ve geriye dönük istihbarat sunar.
+---
 
-⚙️ Donanım Uyumluluk Matrisi
-Bileşen	Raspberry Pi 5 (ARM64)	PC Workstation (x86_64)
-CPU	Cortex-A76 (Optimized)	AMD Ryzen 5 7535HS
-GPU/NPU	XNNPACK / Arm Neon	NVIDIA RTX 2050 (CUDA)
-Model	YOLOv8n (Nano) / INT8	YOLOv8x (Extra Large)
-FPS Hedefi	15-25 FPS (Real-time)	30-60+ FPS (Ultra-fast)
-Gecikme	< 45ms	< 15ms
-🚀 Hızlı Kurulum (Quick Start)
+## ⚙️ Donanım Uyumluluk Matrisi
 
-Projenin bağımlılıklarının izole bir sanal ortamda kurulması tavsiye edilir.
-Bash
+Sistem, "Edge AI" prensipleriyle kodlanmış olup, donanım sınırlarını sonuna kadar kullanacak şekilde asenkronize edilmiştir.
+
+| Bileşen | Uç Nokta (Raspberry Pi 5) | C2 Karargah Sistemi |
+| :--- | :--- | :--- |
+| **CPU** | Cortex-A76 (Optimized) | AMD Ryzen 5 7535HS (3.3 GHz - 4.4GHz Turbo) |
+| **GPU / NPU** | XNNPACK / Arm Neon | NVIDIA RTX 2050 4GB GDDR6 (64 bit - CUDA) |
+| **RAM / Disk** | 8 GB LPDDR4X | 16 GB DDR5 / 512 GB M2 NVMe SSD |
+| **YOLO Modeli**| YOLOv8n (Nano) / INT8 | YOLOv8x (Extra Large) |
+| **Performans** | 15-25 FPS (Real-time) | 60-90 FPS (Saf Donanım Optimizasyonu) |
+| **Ağ Gecikmesi**| < 45ms | Milisaniye Seviyesi (Event-Driven Stream) |
+
+---
+
+## 🚀 Hızlı Kurulum (Quick Start)
+
+Projenin bağımlılıklarının izole bir sanal ortamda (venv) kurulması tavsiye edilir. İşletim sistemi seviyesindeki grafik ve ses kütüphanelerinin (Garuda/Arch için) yüklü olduğundan emin olun.
+
+```bash
+# İşletim sistemi bağımlılıklarını kurun (Arch/Garuda Linux için)
+sudo pacman -S tk mpg123
 
 # Projeyi klonla
-git clone https://github.com/DerdliAsiq/OmniVision.git
+git clone [https://github.com/DerdliAsiq/OmniVision.git](https://github.com/DerdliAsiq/OmniVision.git)
 cd OmniVision
 
-# Sanal ortamı oluştur ve aktif et (Linux/Garuda/Ubuntu)
+# Sanal ortamı oluştur ve aktif et
 python3 -m venv venv
-source venv/bin/activate # Fish shell kullanıyorsanız: source venv/bin/activate.fish
+source venv/bin/activate 
 
-# Bağımlılıkları yükle
+# Python bağımlılıklarını yükle
 pip install -r requirements.txt
 
-# Ana uygulamayı çalıştır
+# Ana uygulamayı (ve arka plandaki Web Sunucusunu) ateşle
 python main.py
+```
 
-📦 Bağımlılıklar
+📡 C2 Web Terminaline Bağlantı
 
-Proje aşağıdaki temel bağımlılıklara ihtiyaç duyar:
+Uygulama başladığında arka planda FastAPI sunucusu devreye girer.
+Aynı ağdaki herhangi bir cihazdan (Telefon/Tablet/PC) şu adrese gidin:
+👉 http://localhost:8000 veya http://<BILGISAYAR_IP_ADRESI>:8000
+⌨️ Taktiksel Kısayollar (Fiziksel)
 
-    ultralytics: YOLOv8 modelleri ve yapay zeka çekirdeği
+    [S] : Hedef Seçim Radarını Aç (Tkinter Arayüzü)
 
-    supervision: Gelişmiş taktiksel çizimler, iz bırakma ve alan filtrelemesi
+    [A] : Alarm Sistemini Devreye Sok / Devreden Çıkar
 
-    opencv-python: Görüntü işleme ve ufuk çizgisi tespiti
+    [D] : OmniVision HUD Gizle/Göster
 
-    torch: CUDA donanım hızlandırması için derin öğrenme altyapısı
+    [T] : ByteTrack Hedef İzleme (Trace) Aç/Kapat
 
-    psutil: Gerçek zamanlı sistem performansı (RAM/CPU) izleme
+    [H] : Dinamik Ufuk Çizgisi (Horizon Scan) Aç/Kapat
 
-    numpy: Matris ve sayısal işlemler
+    [Q] : Operasyonu Güvenli Şekilde Sonlandır
+
+📦 Temel Python Bağımlılıkları
+
+    ultralytics: YOLOv8 çekirdeği.
+
+    supervision: Taktiksel çizimler ve ByteTrack izleme motoru.
+
+    fastapi & uvicorn: Asenkron Komuta Kontrol web sunucusu.
+
+    opencv-python: Matris işleme ve donanım hızlandırmalı MJPEG sıkıştırma.
 
 🔓 Lisans (Open Source)
 
 MIT License
-
 Bu yazılım tamamen açık kaynaklıdır ve MIT Lisansı koşulları altında özgürce kullanılabilir, değiştirilebilir ve dağıtılabilir. Daha fazla detay için LICENSE dosyasına bakabilirsiniz.
-🛡️ Geliştirici Bilgisi
 
-    Chief Architect & Developer: DerdliAsiq
+🛡️ Geliştirici Bilgisi: DerdliAsiq (Project: OmniVision Open Source Initiative)
 
-    Project: OmniVision Open Source Initiative

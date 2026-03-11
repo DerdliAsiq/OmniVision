@@ -1,0 +1,80 @@
+[*] HEDEF ID: 0         ---> TANIM: PERSON
+[*] HEDEF ID: 1         ---> TANIM: BICYCLE
+[*] HEDEF ID: 2         ---> TANIM: CAR
+[*] HEDEF ID: 3         ---> TANIM: MOTORCYCLE
+[*] HEDEF ID: 4         ---> TANIM: AIRPLANE
+[*] HEDEF ID: 5         ---> TANIM: BUS
+[*] HEDEF ID: 6         ---> TANIM: TRAIN
+[*] HEDEF ID: 7         ---> TANIM: TRUCK
+[*] HEDEF ID: 8         ---> TANIM: BOAT
+[*] HEDEF ID: 9         ---> TANIM: TRAFFIC LIGHT
+[*] HEDEF ID: 10        ---> TANIM: FIRE HYDRANT
+[*] HEDEF ID: 11        ---> TANIM: STOP SIGN
+[*] HEDEF ID: 12        ---> TANIM: PARKING METER
+[*] HEDEF ID: 13        ---> TANIM: BENCH
+[*] HEDEF ID: 14        ---> TANIM: BIRD
+[*] HEDEF ID: 15        ---> TANIM: CAT
+[*] HEDEF ID: 16        ---> TANIM: DOG
+[*] HEDEF ID: 17        ---> TANIM: HORSE
+[*] HEDEF ID: 18        ---> TANIM: SHEEP
+[*] HEDEF ID: 19        ---> TANIM: COW
+[*] HEDEF ID: 20        ---> TANIM: ELEPHANT
+[*] HEDEF ID: 21        ---> TANIM: BEAR
+[*] HEDEF ID: 22        ---> TANIM: ZEBRA
+[*] HEDEF ID: 23        ---> TANIM: GIRAFFE
+[*] HEDEF ID: 24        ---> TANIM: BACKPACK
+[*] HEDEF ID: 25        ---> TANIM: UMBRELLA
+[*] HEDEF ID: 26        ---> TANIM: HANDBAG
+[*] HEDEF ID: 27        ---> TANIM: TIE
+[*] HEDEF ID: 28        ---> TANIM: SUITCASE
+[*] HEDEF ID: 29        ---> TANIM: FRISBEE
+[*] HEDEF ID: 30        ---> TANIM: SKIS
+[*] HEDEF ID: 31        ---> TANIM: SNOWBOARD
+[*] HEDEF ID: 32        ---> TANIM: SPORTS BALL
+[*] HEDEF ID: 33        ---> TANIM: KITE
+[*] HEDEF ID: 34        ---> TANIM: BASEBALL BAT
+[*] HEDEF ID: 35        ---> TANIM: BASEBALL GLOVE
+[*] HEDEF ID: 36        ---> TANIM: SKATEBOARD
+[*] HEDEF ID: 37        ---> TANIM: SURFBOARD
+[*] HEDEF ID: 38        ---> TANIM: TENNIS RACKET
+[*] HEDEF ID: 39        ---> TANIM: BOTTLE
+[*] HEDEF ID: 40        ---> TANIM: WINE GLASS
+[*] HEDEF ID: 41        ---> TANIM: CUP
+[*] HEDEF ID: 42        ---> TANIM: FORK
+[*] HEDEF ID: 43        ---> TANIM: KNIFE
+[*] HEDEF ID: 44        ---> TANIM: SPOON
+[*] HEDEF ID: 45        ---> TANIM: BOWL
+[*] HEDEF ID: 46        ---> TANIM: BANANA
+[*] HEDEF ID: 47        ---> TANIM: APPLE
+[*] HEDEF ID: 48        ---> TANIM: SANDWICH
+[*] HEDEF ID: 49        ---> TANIM: ORANGE
+[*] HEDEF ID: 50        ---> TANIM: BROCCOLI
+[*] HEDEF ID: 51        ---> TANIM: CARROT
+[*] HEDEF ID: 52        ---> TANIM: HOT DOG
+[*] HEDEF ID: 53        ---> TANIM: PIZZA
+[*] HEDEF ID: 54        ---> TANIM: DONUT
+[*] HEDEF ID: 55        ---> TANIM: CAKE
+[*] HEDEF ID: 56        ---> TANIM: CHAIR
+[*] HEDEF ID: 57        ---> TANIM: COUCH
+[*] HEDEF ID: 58        ---> TANIM: POTTED PLANT
+[*] HEDEF ID: 59        ---> TANIM: BED
+[*] HEDEF ID: 60        ---> TANIM: DINING TABLE
+[*] HEDEF ID: 61        ---> TANIM: TOILET
+[*] HEDEF ID: 62        ---> TANIM: TV
+[*] HEDEF ID: 63        ---> TANIM: LAPTOP
+[*] HEDEF ID: 64        ---> TANIM: MOUSE
+[*] HEDEF ID: 65        ---> TANIM: REMOTE
+[*] HEDEF ID: 66        ---> TANIM: KEYBOARD
+[*] HEDEF ID: 67        ---> TANIM: CELL PHONE
+[*] HEDEF ID: 68        ---> TANIM: MICROWAVE
+[*] HEDEF ID: 69        ---> TANIM: OVEN
+[*] HEDEF ID: 70        ---> TANIM: TOASTER
+[*] HEDEF ID: 71        ---> TANIM: SINK
+[*] HEDEF ID: 72        ---> TANIM: REFRIGERATOR
+[*] HEDEF ID: 73        ---> TANIM: BOOK
+[*] HEDEF ID: 74        ---> TANIM: CLOCK
+[*] HEDEF ID: 75        ---> TANIM: VASE
+[*] HEDEF ID: 76        ---> TANIM: SCISSORS
+[*] HEDEF ID: 77        ---> TANIM: TEDDY BEAR
+[*] HEDEF ID: 78        ---> TANIM: HAIR DRIER
+[*] HEDEF ID: 79        ---> TANIM: TOOTHBRUSH
