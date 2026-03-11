@@ -6,13 +6,8 @@ OmniVision, kritik tesislerin ve operasyonel sahaların otonom gözetlenmesi iç
 
 V1.2 güncellemeleriyle birlikte sistem, yerel bir tespit yazılımı olmaktan çıkmış; tam asenkron çalışan **C2 (Command & Control) Web Terminali** ile donatılmış gerçek bir uzaktan komuta merkezine dönüşmüştür.
 
-Web Site:
+Web Site: https://omnisurv-j8hzddmh.manus.space
 
-``` 
- 
-https://omnisurv-j8hzddmh.manus.space
-
-```
 ---
 
 ## 🚨 Yeni Nesil Taktiksel Özellikler
