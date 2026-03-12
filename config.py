@@ -1,25 +1,25 @@
-# ==========================================
-# CONFIGURATION & STATE MANAGEMENT
-# ==========================================
-
 class SystemState:
-    SHOW_DASHBOARD = True       
-    TRACKING_ACTIVE = True      
-    SHOW_PERFORMANCE = True     
-    LIDAR_ACTIVE = False        
-    HORIZON_SCAN_ACTIVE = True  
-    MOCK_LIDAR_DISTANCE = 5.0  
-
-    # ==========================================
-    # ERKEN UYARI VE HEDEF SİSTEMİ (V2)
-    # ==========================================
+    # --- RADAR VE HUD DURUMLARI ---
     ALARM_MODE = False
+    TRACKING_ACTIVE = True
+    HORIZON_SCAN_ACTIVE = False
+    SHOW_DASHBOARD = True
+    SHOW_PERFORMANCE = True
+    LIDAR_ACTIVE = False
+    
+    # --- YAPAY ZEKA GÖRME MATRİSİ ---
+    AI_RESOLUTION = 640  # Predator Vision
+    
+    # --- HEDEFLEME HAFIZASI ---
+    ACTIVE_TARGET_IDS = []     # Örn: [0, 67]
+    ACTIVE_TARGET_NAMES = []   # Örn: ["PERSON", "CELL PHONE"]
+    
+    # Model yüklendiğinde otomatik dolacak sözlük (ID: İsim)
+    MODEL_CLASSES = {}         
+    
+    # --- TEHDİT VE SİSTEM DURUMU ---
     IS_THREAT_DETECTED = False
-    IS_AUDIO_PLAYING = False  # Akıllı Ses Kilidi (Smart Lock)
-
-    # YOLO'dan okunan dinamik sınıf haritası (omni_detector dolduracak)
-    MODEL_CLASSES = {}
-
-    # Seçili Hedefler (Varsayılan: 0 = Person, 8 = Boat)
-    ACTIVE_TARGET_IDS = [0, 8]
-    ACTIVE_TARGET_NAMES = ["PERSON", "BOAT"]
+    
+    # YENİ: ASENKRON SES KİLİDİ (CRASH ÖNLEYİCİ)
+    # Bu kilit, alarm çalarken sistemin üst üste ses açıp çökmesini engeller.
+    IS_AUDIO_PLAYING = False

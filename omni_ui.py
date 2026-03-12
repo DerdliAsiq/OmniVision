@@ -10,7 +10,10 @@ from config import SystemState
 
 class TacticalUI:
     def __init__(self):
+        # Genel arayüz fontu (Siberpunk görünüm için Simplex kalıyor)
         self.font = cv2.FONT_HERSHEY_SIMPLEX
+        # Tehdit uyarısı için Times New Roman tarzı ağır font (0 performans kaybı)
+        self.alert_font = cv2.FONT_HERSHEY_COMPLEX 
         self.panel_width = 340 
         self.alarm_file = "alarm.mp3"
         
@@ -19,38 +22,49 @@ class TacticalUI:
 
     def _play_alarm_sound(self):
         """Asenkron Akıllı Ses Kilidi (Smart Lock)"""
-        # Ses zaten çalıyorsa bu thread anında intihar eder, ikinci sese izin vermez
         if SystemState.IS_AUDIO_PLAYING:
             return
             
-        SystemState.IS_AUDIO_PLAYING = True # Kilidi Kapat
+        SystemState.IS_AUDIO_PLAYING = True 
         
         if os.path.exists(self.alarm_file):
             try:
-                # Popen DEĞİL, run kullanıyoruz. Ses fiziksel olarak BİTENE KADAR bu satırda bekler!
                 subprocess.run(["mpg123", "-q", self.alarm_file], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except FileNotFoundError:
                 try:
                     subprocess.run(["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", self.alarm_file], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 except FileNotFoundError:
                     print("\a", end="", flush=True) 
-                    time.sleep(1) # Fallback bip için 1 saniye bekle
+                    time.sleep(1) 
         else:
             print("\a", end="", flush=True)
             time.sleep(1)
             
-        SystemState.IS_AUDIO_PLAYING = False # Ses bitti, Kilidi Aç
+        SystemState.IS_AUDIO_PLAYING = False 
 
     def draw_dashboard(self, frame, fps):
         h, w = frame.shape[:2]
 
-        # --- YENİ TİRİGER: KİLİT KONTROLÜ ---
         if SystemState.IS_THREAT_DETECTED and not SystemState.IS_AUDIO_PLAYING:
             threading.Thread(target=self._play_alarm_sound, daemon=True).start()
 
+        # --- GÖRSEL ŞOK EFEKTİ (HUD KAPALI OLSA BİLE ÇİZİLİR) ---
+        if SystemState.IS_THREAT_DETECTED:
+            # Kan kırmızı dış çerçeve
+            cv2.rectangle(frame, (0, 0), (w, h), (0, 0, 255), 15)
+            warn_text = "CRITICAL THREAT DETECTED"
+            # Times New Roman benzeri ağır fontu kullanıyoruz
+            ws = cv2.getTextSize(warn_text, self.alert_font, 1.2, 3)[0]
+            wx = (w - ws[0]) // 2
+            wy = 50
+            # Kırmızı arka plan ve beyaz metin
+            cv2.rectangle(frame, (wx - 10, wy - 35), (wx + ws[0] + 10, wy + 15), (0, 0, 255), -1)
+            cv2.putText(frame, warn_text, (wx, wy), self.alert_font, 1.2, (255, 255, 255), 3)
+
+        # --- ERKEN ÇIKIŞ ---
+        # Eğer HUD (Yan Panel) gizlendiyse, arayüzü çizme ve doğrudan kamerayı geri yolla.
+        # Üstteki blok sayesinde kırmızı uyarı yazısı ekranda kalmış olacak!
         if not SystemState.SHOW_DASHBOARD:
-            if SystemState.IS_THREAT_DETECTED:
-                cv2.rectangle(frame, (0, 0), (w, h), (0, 0, 255), 15)
             return frame
 
         canvas = np.zeros((h, w + self.panel_width, 3), dtype=np.uint8)
@@ -71,7 +85,6 @@ class TacticalUI:
         cv2.putText(canvas, "[ THREAT ACQUISITION ]", (x_offset, y), self.font, 0.55, (255, 200, 0), 2)
         y += 30
         
-        # Seçili hedefleri yan yana yaz, çok uzunsa sonuna "..." koy
         target_str = ", ".join(SystemState.ACTIVE_TARGET_NAMES)
         if len(target_str) > 23:
             target_str = target_str[:20] + "..."
@@ -111,16 +124,6 @@ class TacticalUI:
         text_size = cv2.getTextSize(legend, self.font, 0.45, 1)[0]
         cx = (w + self.panel_width - text_size[0]) // 2
         cv2.putText(canvas, legend, (cx, h - 12), self.font, 0.45, (200, 200, 200), 1)
-
-        # --- GÖRSEL ŞOK EFEKTİ ---
-        if SystemState.IS_THREAT_DETECTED:
-            cv2.rectangle(canvas, (0, 0), (w, h), (0, 0, 255), 15)
-            warn_text = "CRITICAL THREAT DETECTED"
-            ws = cv2.getTextSize(warn_text, self.font, 1.2, 3)[0]
-            wx = (w - ws[0]) // 2
-            wy = 50
-            cv2.rectangle(canvas, (wx - 10, wy - 35), (wx + ws[0] + 10, wy + 15), (0, 0, 255), -1)
-            cv2.putText(canvas, warn_text, (wx, wy), self.font, 1.2, (255, 255, 255), 3)
 
         return canvas
 
