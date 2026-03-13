@@ -13,3 +13,4 @@ __pycache__/
 # Güvenlik ve Sırlar
 token.txt
 .env
+*.bin
