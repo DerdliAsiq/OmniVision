@@ -10,9 +10,7 @@ from config import SystemState
 
 class TacticalUI:
     def __init__(self):
-        # Genel arayüz fontu (Siberpunk görünüm için Simplex kalıyor)
         self.font = cv2.FONT_HERSHEY_SIMPLEX
-        # Tehdit uyarısı için Times New Roman tarzı ağır font (0 performans kaybı)
         self.alert_font = cv2.FONT_HERSHEY_COMPLEX 
         self.panel_width = 340 
         self.alarm_file = "alarm.mp3"
@@ -21,7 +19,6 @@ class TacticalUI:
             logging.warning(f"[{self.alarm_file}] bulunamadı! Lütfen dosyayı proje dizinine ekleyin.")
 
     def _play_alarm_sound(self):
-        """Asenkron Akıllı Ses Kilidi (Smart Lock)"""
         if SystemState.IS_AUDIO_PLAYING:
             return
             
@@ -48,22 +45,15 @@ class TacticalUI:
         if SystemState.IS_THREAT_DETECTED and not SystemState.IS_AUDIO_PLAYING:
             threading.Thread(target=self._play_alarm_sound, daemon=True).start()
 
-        # --- GÖRSEL ŞOK EFEKTİ (HUD KAPALI OLSA BİLE ÇİZİLİR) ---
         if SystemState.IS_THREAT_DETECTED:
-            # Kan kırmızı dış çerçeve
             cv2.rectangle(frame, (0, 0), (w, h), (0, 0, 255), 15)
             warn_text = "CRITICAL THREAT DETECTED"
-            # Times New Roman benzeri ağır fontu kullanıyoruz
             ws = cv2.getTextSize(warn_text, self.alert_font, 1.2, 3)[0]
             wx = (w - ws[0]) // 2
             wy = 50
-            # Kırmızı arka plan ve beyaz metin
             cv2.rectangle(frame, (wx - 10, wy - 35), (wx + ws[0] + 10, wy + 15), (0, 0, 255), -1)
             cv2.putText(frame, warn_text, (wx, wy), self.alert_font, 1.2, (255, 255, 255), 3)
 
-        # --- ERKEN ÇIKIŞ ---
-        # Eğer HUD (Yan Panel) gizlendiyse, arayüzü çizme ve doğrudan kamerayı geri yolla.
-        # Üstteki blok sayesinde kırmızı uyarı yazısı ekranda kalmış olacak!
         if not SystemState.SHOW_DASHBOARD:
             return frame
 
@@ -80,7 +70,6 @@ class TacticalUI:
         cv2.putText(canvas, "[ OMNIVISION CORE ]", (x_offset, 35), self.font, 0.7, (0, 255, 255), 2)
         cv2.line(canvas, (x_offset, 50), (x_offset + self.panel_width - 40, 50), (80, 80, 80), 1)
 
-        # 1. BÖLÜM: TEHDİT HEDEFLEME
         y = 85
         cv2.putText(canvas, "[ THREAT ACQUISITION ]", (x_offset, y), self.font, 0.55, (255, 200, 0), 2)
         y += 30
@@ -98,17 +87,14 @@ class TacticalUI:
         alarm_status = "ENGAGED" if SystemState.ALARM_MODE else "STANDBY"
         cv2.putText(canvas, f"RADAR  : [{alarm_status}]", (x_offset, y), self.font, 0.5, alarm_color, 2)
 
-        # 2. BÖLÜM: SİSTEM MODÜLLERİ
         y += 60
         cv2.putText(canvas, "[ SYSTEM MODULES ]", (x_offset, y), self.font, 0.55, (255, 200, 0), 2)
         y += 30
         self._draw_status(canvas, "Tracking (T)", SystemState.TRACKING_ACTIVE, x_offset, y)
         y += 25
-        self._draw_status(canvas, "LiDAR    (L)", SystemState.LIDAR_ACTIVE, x_offset, y)
-        y += 25
-        self._draw_status(canvas, "Horizon  (H)", SystemState.HORIZON_SCAN_ACTIVE, x_offset, y)
+        # YENİ: LiDAR Silindi, Yerine Ses Şalteri Eklendi!
+        self._draw_status(canvas, "Voice C2 (V)", SystemState.VOICE_COMMANDS_ACTIVE, x_offset, y)
 
-        # 3. BÖLÜM: PERFORMANS 
         y += 60
         if SystemState.SHOW_PERFORMANCE:
             cv2.putText(canvas, "[ METRICS ]", (x_offset, y), self.font, 0.55, (255, 200, 0), 2)
@@ -119,8 +105,8 @@ class TacticalUI:
             y += 25
             cv2.putText(canvas, f"RAM : %{psutil.virtual_memory().percent}", (x_offset, y), self.font, 0.5, (0, 255, 0), 1)
 
-        # --- COMMAND LEGEND ---
-        legend = "[Q] ABORT | [D] HUD | [A] ALARM TOGGLE | [S] SELECT TARGETS"
+        # YENİ: Alt panel legend (kısayol) rehberi güncellendi
+        legend = "[Q] ABORT | [D] HUD | [A] ALARM | [V] VOICE | [T] TRACK"
         text_size = cv2.getTextSize(legend, self.font, 0.45, 1)[0]
         cx = (w + self.panel_width - text_size[0]) // 2
         cv2.putText(canvas, legend, (cx, h - 12), self.font, 0.45, (200, 200, 200), 1)
