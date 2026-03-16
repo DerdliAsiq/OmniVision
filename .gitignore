@@ -27,3 +27,5 @@ token.txt
 *.ckpt
 *.zip
 *.tar.gz
+*.jpg
+*.png

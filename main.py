@@ -20,10 +20,13 @@ def run_web_server():
     logger.info("[+] C2 Web Sunucusu Başlatılıyor: http://0.0.0.0:8000")
     uvicorn.run(tactical_web_dashboard.app, host="0.0.0.0", port=8000, log_level="error")
 
+# OPTİMİZASYON: Görüntü Kaydetme İşlemini Ana Döngüden Koparan Gölge Fonksiyon
+def save_evidence_async(img_path, frame_copy):
+    cv2.imwrite(img_path, frame_copy)
+
 def main():
     print("[+] OmniVision V1.3 Başlatılıyor (Voice C2 Devrede)...")
     
-    # Kanıt klasörünün varlığını güvenceye al
     if not os.path.exists(SystemState.EVIDENCE_DIR):
         os.makedirs(SystemState.EVIDENCE_DIR)
         
@@ -61,23 +64,29 @@ def main():
 
     prev_time = time.time()
     last_log_state = {} 
+    
+    # --- TERMAL KONTROL VE FPS LİMİTLEYİCİ AYARLARI ---
+    TARGET_FPS = 60
+    FRAME_TIME = 1.0 / TARGET_FPS
 
     try:
         while True:
+            # Döngü başlangıç zamanı (Hız Limiti Hesaplaması İçin)
+            loop_start = time.time() 
+            
             frame = engine.get_frame()
-            if frame is None: continue
+            if frame is None: 
+                time.sleep(0.001)
+                continue
                 
             processed_frame, threats = detector.process(frame)
             
-            # 1. FPS'i hesapla ve HUD'u (Arayüzü) çiz!
             new_time = time.time()
             fps = 1 / (new_time - prev_time) if (new_time - prev_time) > 0 else 0
             prev_time = new_time
             
-            # Artık tüm arayüz sadece omni_ui.py içinden geliyor (Sol alttaki çirkin kutu silindi!)
             final_frame = ui.draw_dashboard(processed_frame, fps)
             
-            # 2. Tehditleri Logla ve FOTO ÇEK
             curr_time = time.time()
             for t in threats:
                 obj_id = t['id']
@@ -95,50 +104,43 @@ def main():
                         
                 if should_log:
                     img_path = ""
-                    # SADECE "ALARM" VERİLDİĞİNDE FOTOĞRAF ÇEK
                     if e_type == "ALARM":
                         timestamp_str = time.strftime("%Y%m%d_%H%M%S")
                         img_filename = f"ALARM_obj{obj_id}_{timestamp_str}.jpg"
                         img_path = os.path.join(SystemState.EVIDENCE_DIR, img_filename)
-                        cv2.imwrite(img_path, final_frame)
+                        
+                        threading.Thread(target=save_evidence_async, args=(img_path, final_frame.copy()), daemon=True).start()
                         
                     db.log_threat(
-                        object_id=obj_id,
-                        label=t['label'],
-                        event_type=e_type,
-                        duration_sec=t['duration_sec'],
-                        confidence=t['confidence'],
-                        bbox=t['bbox'],
-                        image_path=img_path
+                        object_id=obj_id, label=t['label'], event_type=e_type,
+                        duration_sec=t['duration_sec'], confidence=t['confidence'],
+                        bbox=t['bbox'], image_path=img_path
                     )
                     last_log_state[obj_id] = {"time": curr_time, "type": e_type}
 
-            # Görüntüyü Web Sunucusuna ve Ekrana Aktar
             tactical_web_dashboard.update_video_frame(final_frame)
             cv2.imshow(window_name, final_frame)
             
-            # ==========================================
-            # ⌨️ KLAVYE KISAYOLLARI VE ŞALTERLER
-            # ==========================================
             key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'): 
-                break
-            elif key == ord('d'): 
-                SystemState.SHOW_DASHBOARD = not SystemState.SHOW_DASHBOARD
-            elif key == ord('t'): 
-                SystemState.TRACKING_ACTIVE = not SystemState.TRACKING_ACTIVE
+            if key == ord('q'): break
+            elif key == ord('d'): SystemState.SHOW_DASHBOARD = not SystemState.SHOW_DASHBOARD
+            elif key == ord('t'): SystemState.TRACKING_ACTIVE = not SystemState.TRACKING_ACTIVE
             elif key == ord('v'): 
                 SystemState.VOICE_COMMANDS_ACTIVE = not SystemState.VOICE_COMMANDS_ACTIVE
                 if SystemState.VOICE_COMMANDS_ACTIVE:
                     if 'voice' in locals(): voice.play_feedback("listening.mp3")
-            elif key == ord('p'): 
-                SystemState.SHOW_PERFORMANCE = not SystemState.SHOW_PERFORMANCE
+            elif key == ord('p'): SystemState.SHOW_PERFORMANCE = not SystemState.SHOW_PERFORMANCE
             elif key == ord('a'): 
                 SystemState.ALARM_MODE = not SystemState.ALARM_MODE
                 print(f"[*] RADAR DURUMU: {'AKTİF' if SystemState.ALARM_MODE else 'PASİF'}")
             elif key == ord('s'): 
-                print("[!] Hedef Seçim Menüsü Açılıyor. Sistem Standby Modunda...")
                 open_target_menu()
+
+            # --- 60 FPS ELEKTRONİK FREN SİSTEMİ ---
+            # Eğer döngü 1/60 saniyeden (yaklaşık 16.6ms) daha hızlı bittiyse, arta kalan sürede sistemi dinlendir.
+            elapsed_time = time.time() - loop_start
+            if elapsed_time < FRAME_TIME:
+                time.sleep(FRAME_TIME - elapsed_time)
 
     except KeyboardInterrupt:
         print("[!] Kullanıcı tarafından durduruldu.")
@@ -149,7 +151,6 @@ def main():
         if 'db' in locals(): db.stop()
         if 'voice' in locals(): voice.stop()
         cv2.destroyAllWindows()
-        print("[+] Sistem Güvenli Şekilde Kapatıldı.")
 
 if __name__ == "__main__":
     main()
