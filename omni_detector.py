@@ -2,6 +2,7 @@ import logging
 import cv2
 import time  
 import numpy as np
+import os
 from config import SystemState
 import supervision as sv
 
@@ -10,19 +11,32 @@ try:
 except ImportError:
     YOLO = None
 
+try:
+    import torch
+except ImportError:
+    torch = None
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("OmniVision")
 
 class OmniDetector:
-    def __init__(self, model_path="yolo26x.pt"):
+    def __init__(self, base_model_name="yolo26x"):
         self.model = None
         self.track_history = {} 
+        self.frame_count = 0  # VRAM Temizleyici için sayaç
         
         try:
             if YOLO is None:
                 raise RuntimeError("ultralytics package is not installed")
 
-            logger.info(f"[*] SİSTEM YÜKSELTİLMESİ: {model_path} İndiriliyor/Yükleniyor...")
+            # TAKTİK 3 (TensorRT Altyapısı): .engine dosyası varsa Onu Seç, yoksa .pt ile devam et.
+            if os.path.exists(f"{base_model_name}.engine"):
+                model_path = f"{base_model_name}.engine"
+                logger.info(f"[*] 🚀 TENSOR-RT MOTORU BULUNDU: {model_path} yükleniyor!")
+            else:
+                model_path = f"{base_model_name}.pt"
+                logger.info(f"[*] SİSTEM YÜKSELTİLMESİ: {model_path} İndiriliyor/Yükleniyor...")
+
             self.model = YOLO(model_path)
             SystemState.MODEL_CLASSES = self.model.names
             
@@ -53,7 +67,6 @@ class OmniDetector:
             return processed_frame, threats
 
         try:
-            # Ufuk kesme (ROI) tehlikesi tamamen söküldü, tüm ekran işleniyor
             results = self.model(frame, imgsz=SystemState.AI_RESOLUTION, device=0, half=True, conf=0.45, verbose=False)[0]
             detections = sv.Detections.from_ultralytics(results)
 
@@ -170,5 +183,11 @@ class OmniDetector:
 
         except Exception as e:
             logger.error(f"Detection failed: {e}")
+
+        # TAKTİK 2 (VRAM Çöpçüsü): Her 60 karede bir VRAM'deki kullanılmayan PyTorch artıklarını temizler
+        self.frame_count += 1
+        if self.frame_count % 60 == 0:
+            if torch and torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
         return processed_frame, threats

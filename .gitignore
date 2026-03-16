@@ -6,7 +6,8 @@ __pycache__/
 
 # Yapay Zeka Ağırlık Dosyaları
 *.pt
-
+*.onnx
+yolov26x.onnx
 # Veritabanı ve Yerel Loglar
 *.db
 
@@ -14,3 +15,15 @@ __pycache__/
 token.txt
 .env
 *.bin
+*.key
+*.pem
+*.crt
+# Diğer Geçici Dosyalar
+*.log
+*.tmp
+*.bak
+*.onnx
+*.h5
+*.ckpt
+*.zip
+*.tar.gz

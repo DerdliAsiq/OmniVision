@@ -2,7 +2,6 @@ import os
 import sys
 import difflib
 
-# İşletim sistemi dil kilidi (ASCII çöküşünü önler, Türkçe karakterleri korur)
 os.environ["PYTHONIOENCODING"] = "utf-8"
 os.environ["PYTHONUTF8"] = "1"
 os.environ["LANG"] = "en_US.UTF-8"
@@ -44,8 +43,9 @@ class OmniVoice:
                 print("[+] İndirme tamamlandı! Artık sistem %100 ÇEVRİMDIŞI çalışacak.")
                 print("="*60 + "\n")
 
-            logger.info(f"[*] J.A.R.V.I.S. Kulakları Lokal Klasörden Yükleniyor...")
-            self.model = WhisperModel(model_dir, device="cuda", compute_type="float16")
+            logger.info(f"[*] J.A.R.V.I.S. Kulakları Lokal Klasörden Yükleniyor... (CPU MODU)")
+            # Taktik 1: device="cpu" ve compute_type="int8" yapılarak VRAM tamamen boşaltıldı!
+            self.model = WhisperModel(model_dir, device="cpu", compute_type="int8")
             
             self.recognizer = sr.Recognizer()
             self.recognizer.dynamic_energy_threshold = True 
@@ -82,18 +82,15 @@ class OmniVoice:
 
     def _listen_loop(self):
         while self.is_running:
-            # Şalter Kapalıysa mikrofonu fiziksel olarak bırak ve bekle
             if not SystemState.VOICE_COMMANDS_ACTIVE:
                 time.sleep(0.5)
                 continue
                 
-            # Şalter Açıldıysa mikrofonu kilitle ve dinlemeye başla
             try:
                 with sr.Microphone(sample_rate=16000) as source:
                     self.recognizer.adjust_for_ambient_noise(source, duration=1.0)
                     print("\n[🎙️] MİKROFON AKTİF: Dinleniyor... (Stealth Mod Kapalı)")
                     
-                    # Şalter açık kaldığı sürece bu iç döngüde dinler
                     while self.is_running and SystemState.VOICE_COMMANDS_ACTIVE:
                         if self.is_speaking:
                             time.sleep(0.1)
@@ -111,7 +108,6 @@ class OmniVoice:
                 logger.error(f"[X] Mikrofon donanımına erişilemedi: {e}")
                 time.sleep(1)
             
-            # V tuşuna basılıp şalter kapatıldığında buraya düşer
             if self.is_running:
                 print("\n[🔇] MİKROFON KAPALI: Sistem sağırlaştırıldı (Stealth Mod Aktif).")
 
@@ -132,7 +128,6 @@ class OmniVoice:
         clean_words = [word for word in words if word not in wake_words]
         clean_text = " ".join(clean_words)
         
-        # Sadece Alfa denildiyse
         if len(clean_words) == 0 or len(clean_text) < 3:
             return "LISTENING"
 

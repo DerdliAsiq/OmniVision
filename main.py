@@ -69,35 +69,15 @@ def main():
                 
             processed_frame, threats = detector.process(frame)
             
-            # 1. Önce FPS'i hesapla ve HUD'u (Arayüzü) çiz!
+            # 1. FPS'i hesapla ve HUD'u (Arayüzü) çiz!
             new_time = time.time()
             fps = 1 / (new_time - prev_time) if (new_time - prev_time) > 0 else 0
             prev_time = new_time
             
+            # Artık tüm arayüz sadece omni_ui.py içinden geliyor (Sol alttaki çirkin kutu silindi!)
             final_frame = ui.draw_dashboard(processed_frame, fps)
             
-            # ==========================================
-            # 🖥️ TAKTİKSEL KONTROLLER (PREDATOR HUD)
-            # ==========================================
-            if SystemState.SHOW_DASHBOARD:
-                h, w = final_frame.shape[:2]
-                
-                overlay = final_frame.copy()
-                cv2.rectangle(overlay, (10, h - 110), (350, h - 10), (0, 0, 0), -1)
-                cv2.addWeighted(overlay, 0.6, final_frame, 0.4, 0, final_frame)
-                
-                cv2.rectangle(final_frame, (10, h - 110), (350, h - 10), (0, 255, 0), 1)
-                cv2.putText(final_frame, "TAKTIKSEL KONTROLLER", (20, h - 85), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-                
-                trk_color = (0, 255, 0) if SystemState.TRACKING_ACTIVE else (0, 0, 255)
-                trk_text = "AKTIF" if SystemState.TRACKING_ACTIVE else "PASIF"
-                cv2.putText(final_frame, f"[T] Hedef Takibi : {trk_text}", (20, h - 55), cv2.FONT_HERSHEY_SIMPLEX, 0.6, trk_color, 2)
-                
-                voc_color = (0, 255, 0) if SystemState.VOICE_COMMANDS_ACTIVE else (0, 0, 255)
-                voc_text = "DINLIYOR" if SystemState.VOICE_COMMANDS_ACTIVE else "KAPALI"
-                cv2.putText(final_frame, f"[V] Ses Karargahi: {voc_text}", (20, h - 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, voc_color, 2)
-
-            # 2. Şimdi (Tüm ekran çizimleri bittikten sonra) Tehditleri Logla ve FOTO ÇEK
+            # 2. Tehditleri Logla ve FOTO ÇEK
             curr_time = time.time()
             for t in threats:
                 obj_id = t['id']
@@ -137,6 +117,9 @@ def main():
             tactical_web_dashboard.update_video_frame(final_frame)
             cv2.imshow(window_name, final_frame)
             
+            # ==========================================
+            # ⌨️ KLAVYE KISAYOLLARI VE ŞALTERLER
+            # ==========================================
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'): 
                 break

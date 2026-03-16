@@ -1,5 +1,9 @@
 # 👁️ OmniVision: Taktiksel C2 Gözetim Platformu
 
+## Web Site
+
+https://omnivision-q8xdmnay.manus.space/
+
 ## ✨ Yapay Zeka Destekli Otonom Gözetim ve Komuta Kontrol Merkezi
 
 OmniVision, kritik tesislerin ve operasyonel sahaların otonom gözetlenmesi için geliştirilmiş, son teknoloji hibrit bir yapay zeka platformudur. DerdliAsiq tarafından açık kaynak dünyasına kazandırılan bu sistem; düşük gecikmeli nesne takibi, dinamik çevre güvenliği ve donanım hızlandırmalı analiz katmanlarını bir araya getirerek, gözetim ve güvenlik operasyonlarını yeni bir boyuta taşır.

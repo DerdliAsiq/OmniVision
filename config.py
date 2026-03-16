@@ -18,7 +18,7 @@ class SystemState:
     IS_AUDIO_PLAYING = False
     
     # --- ANOMALİ (İSTİHBARAT) MOTORU ---
-    LOITER_THRESHOLD = 5  
+    LOITER_THRESHOLD = 180  # Bir nesne 180 saniyeden fazla aynı yerde kalırsa loitering olarak işaretlenecek 
     
     # --- ADLİ BİLİŞİM VE VERİTABANI KONTROLÜ ---
     LOG_COOLDOWN = 3  
