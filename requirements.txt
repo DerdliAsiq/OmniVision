@@ -2,10 +2,12 @@
 
 opencv-python
 ultralytics
-torch
+torch==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
 psutil
 numpy
 supervision
 fastapi
 uvicorn
 pygame
+python-dotenv
+pyserial

@@ -13,19 +13,19 @@ logger = logging.getLogger("OmniVision")
 class OmniDatabase:
     def __init__(self, db_name="tactical_vision_v2.db"):
         self.db_name = db_name
-        self.log_queue = queue.Queue()
+        # [GÜVENLİK - SIFIR HATA] Bellek sızıntısı ve DoS koruması: Maksimum 1000 olay tamponlanabilir.
+        self.log_queue = queue.Queue(maxsize=1000)
         self.is_running = True
         
-        # Kanıt klasörünü oluştur
         if not os.path.exists(SystemState.EVIDENCE_DIR):
             os.makedirs(SystemState.EVIDENCE_DIR)
             
         self._create_tables()
-        self._purge_old_logs() # Sistem başlarken 1 günlük çöpleri temizle
+        self._purge_old_logs() 
         
         self.worker_thread = threading.Thread(target=self._process_queue, daemon=True)
         self.worker_thread.start()
-        logger.info("[+] SQL Adli Bilişim Motoru (V2) Başlatıldı.")
+        logger.info("[+] SQL Adli Bilişim Motoru Başlatıldı.")
 
     def _create_tables(self):
         try:
@@ -46,12 +46,10 @@ class OmniDatabase:
                     image_path TEXT
                 )
             ''')
-            
-            # Eğer eski veritabanında image_path sütunu yoksa, sistemi çökertmeden sütunu ekle
             try:
                 cursor.execute("ALTER TABLE threat_logs ADD COLUMN image_path TEXT")
             except sqlite3.OperationalError:
-                pass # Sütun zaten var
+                pass 
                 
             conn.commit()
             conn.close()
@@ -63,28 +61,26 @@ class OmniDatabase:
         try:
             conn = sqlite3.connect(self.db_name)
             cursor = conn.cursor()
-            
-            # Zaman sınırını hesapla (Örn: Şu an - 1 Gün)
             cutoff_date = (datetime.now() - timedelta(days=SystemState.LOG_RETENTION_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
             
-            # Önce silinecek fotoğrafların yollarını al ve diskten sil
             cursor.execute("SELECT image_path FROM threat_logs WHERE timestamp < ?", (cutoff_date,))
             old_records = cursor.fetchall()
             
             for row in old_records:
                 img_path = row[0]
                 if img_path and os.path.exists(img_path):
-                    os.remove(img_path)
-                    logger.info(f"[🗑️] Eski kanıt imha edildi: {img_path}")
-                    
-            # Sonra veritabanındaki log satırlarını sil
+                    try:
+                        os.remove(img_path)
+                    except OSError:
+                        pass # Klasör kitlenmesi veya dosyanın açık olması durumunda thread'i çökertme
+                        
             cursor.execute("DELETE FROM threat_logs WHERE timestamp < ?", (cutoff_date,))
             deleted_count = cursor.rowcount
             conn.commit()
             conn.close()
             
             if deleted_count > 0:
-                logger.info(f"[🗑️] {deleted_count} adet eski istihbarat logu imha edildi (Politika: {SystemState.LOG_RETENTION_DAYS} Gün).")
+                logger.info(f"[🗑️] {deleted_count} adet eski istihbarat logu imha edildi.")
         except Exception as e:
             logger.error(f"[X] Otonom imha hatası: {e}")
 
@@ -94,17 +90,19 @@ class OmniDatabase:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         payload = (timestamp, object_id, label, event_type, duration_sec, float(confidence), x_center, y_center, image_path)
-        self.log_queue.put(payload)
+        try:
+            # Queue doluysa eski veriyi zorlama, yenisini fırlat geç (Performans önceliği)
+            self.log_queue.put_nowait(payload)
+        except queue.Full:
+            logger.warning("[!] Log kuyruğu dolu, olay atlandı (performans koruması)") 
 
     def _process_queue(self):
         conn = sqlite3.connect(self.db_name, timeout=10)
         cursor = conn.cursor()
         cursor.execute("PRAGMA journal_mode=WAL;")
-        
         last_purge_time = time.time()
         
         while self.is_running:
-            # Arka planda her saat başı temizlik kontrolü yap
             if time.time() - last_purge_time > 3600:
                 self._purge_old_logs()
                 last_purge_time = time.time()

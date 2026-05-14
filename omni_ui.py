@@ -5,8 +5,11 @@ import time
 import threading
 import os
 import logging
-import subprocess
 from datetime import datetime
+
+# YENİ NESİL SES MOTORU (Windows Uyumlu)
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+import pygame 
 
 try:
     from config import SystemState
@@ -31,25 +34,31 @@ class TacticalUI:
         self.start_time = time.time()
         self.pulse_val = 0
         self.scan_line_y = 0
-        
-        # OPTİMİZASYON: Statik Çizim Önbelleği
         self.static_canvas = None
         self.last_dim = None
+        self.last_alarm_time = 0.0
+        self.alarm_cooldown = 2.0
         
-        if not os.path.exists(self.alarm_file):
-            logging.warning(f"[{self.alarm_file}] bulunamadı!")
+        # --- PYGAME SES BAŞLATMA ---
+        try:
+            pygame.mixer.init()
+            if os.path.exists(self.alarm_file):
+                self.alarm_sound = pygame.mixer.Sound(self.alarm_file)
+                self.alarm_sound.set_volume(0.8)
+            else:
+                self.alarm_sound = None
+                logging.warning(f"[{self.alarm_file}] bulunamadı!")
+        except Exception as e:
+            logging.error(f"Ses motoru başlatılamadı: {e}")
+            self.alarm_sound = None
 
-    def _play_alarm_sound(self):
-        if SystemState.IS_AUDIO_PLAYING: return
-        SystemState.IS_AUDIO_PLAYING = True 
-        if os.path.exists(self.alarm_file):
-            try: subprocess.run(["mpg123", "-q", self.alarm_file], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except: pass
-        else: print("\a", end="", flush=True); time.sleep(1)
-        SystemState.IS_AUDIO_PLAYING = False 
+    def _play_alarm_sound(self):        
+        if self.alarm_sound:
+            self.alarm_sound.play()
+        else:
+            print("\a", end="", flush=True)
 
     def _build_static_canvas(self, h, w):
-        """Ağır CPU işlemi gerektiren tüm arka planı SADECE 1 KEZ çizer ve hafızaya alır."""
         canvas = np.zeros((h, w + self.panel_width, 3), dtype=np.uint8)
         panel_x = w
         cv2.rectangle(canvas, (panel_x, 0), (panel_x + self.panel_width, h), (12, 12, 12), -1)
@@ -67,27 +76,28 @@ class TacticalUI:
             cv2.putText(canvas, title, (x + 10, y - 8), self.font, 0.45, self.CLR_ACCENT, 1, cv2.LINE_AA)
 
         draw_glass(115, 110, "TARGET ACQUISITION")
-        draw_glass(265, 100, "SYSTEM MODULES")
+        draw_glass(265, 140, "SYSTEM MODULES")
         if SystemState.SHOW_PERFORMANCE:
             draw_glass(405, 150, "DIAGNOSTICS")
 
         footer_h = 45
         cv2.rectangle(canvas, (0, h - footer_h), (w + self.panel_width, h), (10, 10, 10), -1)
         cv2.line(canvas, (0, h - footer_h), (w + self.panel_width, h - footer_h), (40, 40, 40), 1)
-        controls = "[Q] ABORT | [S] TARGETS | [A] ALARM | [D] HUD | [T] TRACK | [V] VOICE"
+        controls = "[Q] ABORT | [S] TARGETS | [A] ALARM | [D] HUD | [T] TRACK | [V] VOICE | [Z] ZONE | [L] LiDAR | [F1] DEBUG"
         ts = cv2.getTextSize(controls, self.font, 0.4, 1)[0]
         cv2.putText(canvas, controls, ((w + self.panel_width - ts[0]) // 2, h - 18), self.font, 0.4, self.CLR_SUBTEXT, 1, cv2.LINE_AA)
 
         return canvas
 
-    def draw_dashboard(self, frame, fps):
+    def draw_dashboard(self, frame, fps, engine=None, inference_ms=0):
         h, w = frame.shape[:2]
         elapsed = time.time() - self.start_time
         self.pulse_val = (np.sin(elapsed * 5) + 1) / 2 
-        
-        if SystemState.IS_THREAT_DETECTED:
-            if not SystemState.IS_AUDIO_PLAYING:
-                threading.Thread(target=self._play_alarm_sound, daemon=True).start()
+
+        now = time.time()
+        if SystemState.IS_THREAT_DETECTED and (now - self.last_alarm_time) >= self.alarm_cooldown:
+            self.last_alarm_time = now
+            threading.Thread(target=self._play_alarm_sound, daemon=True).start()
             alpha = self.pulse_val * 0.4
             overlay = frame.copy()
             cv2.rectangle(overlay, (0, 0), (w, h), self.CLR_NEON_R, 15)
@@ -99,22 +109,23 @@ class TacticalUI:
             cv2.rectangle(frame, (tx-20, ty-45), (tx+ts[0]+20, ty+20), (0,0,180), -1)
             cv2.putText(frame, warn_msg, (tx, ty), self.alert_font, 1.0, (255,255,255), 2, cv2.LINE_AA)
 
+        cv2.putText(frame, f"{int(fps)} FPS", (w - 95, 25), self.font, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+        if SystemState.DEBUG_MODE:
+            cv2.putText(frame, "DEBUG", (10, 25), self.font, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
+
         if not SystemState.SHOW_DASHBOARD:
             return frame
 
-        # Önbelleği Oluştur veya Doğrudan Kullan
         if self.static_canvas is None or self.last_dim != (h, w):
             self.static_canvas = self._build_static_canvas(h, w)
             self.last_dim = (h, w)
 
-        # Kamera Görüntüsünü Statik Şablonun İçine Yapıştır
         canvas = self.static_canvas.copy()
         canvas[0:h, 0:w] = frame
         
         panel_x = w
         x_off = panel_x + 25
         
-        # Sadece Değişen Metinleri ve Animasyonları Çiz
         cv2.putText(canvas, "OMNIVISION", (x_off, 35), self.font, 0.75, self.CLR_ACCENT, 2, cv2.LINE_AA)
         cv2.putText(canvas, "TACTICAL OS v2.1", (x_off + 155, 35), self.font, 0.4, self.CLR_SUBTEXT, 1, cv2.LINE_AA)
         cv2.putText(canvas, datetime.now().strftime("%Y-%m-%d  %H:%M:%S"), (x_off, 65), self.font, 0.4, self.CLR_SUBTEXT, 1, cv2.LINE_AA)
@@ -142,6 +153,16 @@ class TacticalUI:
 
         draw_led(x_off + 5, 300, "Tracking (T)", SystemState.TRACKING_ACTIVE)
         draw_led(x_off + 5, 335, "Voice C2 (V)", SystemState.VOICE_COMMANDS_ACTIVE)
+        draw_led(x_off + 5, 370, "PolyZone (Z)", SystemState.POLYGON_ZONES_ACTIVE)
+
+        if SystemState.LIDAR_ACTIVE:
+            dist = SystemState.LIDAR_DISTANCE
+            if dist is not None:
+                dist_color = self.CLR_NEON_G if dist > 100 else (0, 255, 255) if dist > 50 else self.CLR_NEON_R
+                cv2.putText(canvas, f"LiDAR: {dist}cm", (x_off + 5, 400), self.font, 0.5, dist_color, 1, cv2.LINE_AA)
+                bar_len = min(int(dist / 200 * 240), 240)
+                cv2.rectangle(canvas, (x_off + 5, 407), (x_off + 5 + 240, 415), (40, 40, 40), -1)
+                cv2.rectangle(canvas, (x_off + 5, 407), (x_off + 5 + bar_len, 415), dist_color, -1)
 
         if SystemState.SHOW_PERFORMANCE:
             cv2.putText(canvas, f"ENGINE FPS: {int(fps)}", (x_off, 440), self.font, 0.45, self.CLR_NEON_G, 1, cv2.LINE_AA)
@@ -153,6 +174,23 @@ class TacticalUI:
             
             draw_bar(485, "CPU LOAD", psutil.cpu_percent(), self.CLR_ACCENT)
             draw_bar(530, "MEMORY", psutil.virtual_memory().percent, self.CLR_NEON_G)
+
+        if SystemState.DEBUG_MODE:
+            read_ms = engine.frame_read_time if engine else 0
+            drop_cnt = engine.drop_count if engine else 0
+            lines = [
+                f"FPS: {int(fps)}",
+                f"INF: {inference_ms:.0f}ms",
+                f"READ: {read_ms:.0f}ms",
+                f"THR: {len(SystemState.ACTIVE_TARGET_IDS)}",
+                f"ZONE: {len(SystemState.ZONE_VIOLATIONS)}",
+                f"LIDAR: {SystemState.LIDAR_DISTANCE or '-'}cm",
+                f"DROP: {drop_cnt}",
+                f"VRAM: N/A",
+            ]
+            dx, dy = x_off + 5, 445
+            for li, line in enumerate(lines):
+                cv2.putText(canvas, line, (dx, dy + li * 18), self.font, 0.4, (0, 255, 255), 1, cv2.LINE_AA)
 
         self.scan_line_y = (self.scan_line_y + 4) % h
         overlay = canvas.copy()

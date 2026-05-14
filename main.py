@@ -9,12 +9,15 @@ from omni_detector import OmniDetector
 from omni_ui import TacticalUI
 from omni_database import OmniDatabase
 from omni_voice import OmniVoice 
+from omni_lidar import OmniLidar
 from config import SystemState
 from target_menu import open_target_menu
 import tactical_web_dashboard
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("OmniVision")
+
+DEBUG_FONT = None
 
 def run_web_server():
     logger.info("[+] C2 Web Sunucusu Başlatılıyor: http://0.0.0.0:8000")
@@ -39,12 +42,14 @@ def main():
         ui = TacticalUI()
         db = OmniDatabase() 
         voice = OmniVoice() 
+        lidar = OmniLidar()
     except Exception as e:
         logger.error(f"Failed to initialize system components: {e}")
         return
     
     engine.start()
-    voice.start() 
+    voice.start()
+    lidar.start()
     
     max_wait = 5  
     start_time = time.time()
@@ -64,28 +69,25 @@ def main():
 
     prev_time = time.time()
     last_log_state = {} 
+    frame_times = []
     
-    # --- TERMAL KONTROL VE FPS LİMİTLEYİCİ AYARLARI ---
-    TARGET_FPS = 60
-    FRAME_TIME = 1.0 / TARGET_FPS
-
     try:
         while True:
-            # Döngü başlangıç zamanı (Hız Limiti Hesaplaması İçin)
-            loop_start = time.time() 
+            loop_start = time.perf_counter()
             
             frame = engine.get_frame()
             if frame is None: 
-                time.sleep(0.001)
                 continue
                 
+            t0 = time.perf_counter()
             processed_frame, threats = detector.process(frame)
+            inference_ms = (time.perf_counter() - t0) * 1000
             
             new_time = time.time()
             fps = 1 / (new_time - prev_time) if (new_time - prev_time) > 0 else 0
             prev_time = new_time
             
-            final_frame = ui.draw_dashboard(processed_frame, fps)
+            final_frame = ui.draw_dashboard(processed_frame, fps, engine, inference_ms)
             
             curr_time = time.time()
             for t in threats:
@@ -135,12 +137,25 @@ def main():
                 print(f"[*] RADAR DURUMU: {'AKTİF' if SystemState.ALARM_MODE else 'PASİF'}")
             elif key == ord('s'): 
                 open_target_menu()
+            elif key == ord('z'):
+                SystemState.POLYGON_ZONES_ACTIVE = not SystemState.POLYGON_ZONES_ACTIVE
+                print(f"[*] SANAL ÇİT: {'AKTİF' if SystemState.POLYGON_ZONES_ACTIVE else 'PASİF'}")
+            elif key == ord('l'):
+                SystemState.LIDAR_ACTIVE = not SystemState.LIDAR_ACTIVE
+                print(f"[*] LiDAR/SONAR: {'AKTİF' if SystemState.LIDAR_ACTIVE else 'PASİF'}")
+            elif key == 0x70:
+                SystemState.DEBUG_MODE = not SystemState.DEBUG_MODE
+                print(f"[*] DEBUG MOD: {'AKTİF' if SystemState.DEBUG_MODE else 'PASİF'}")
 
-            # --- 60 FPS ELEKTRONİK FREN SİSTEMİ ---
-            # Eğer döngü 1/60 saniyeden (yaklaşık 16.6ms) daha hızlı bittiyse, arta kalan sürede sistemi dinlendir.
-            elapsed_time = time.time() - loop_start
-            if elapsed_time < FRAME_TIME:
-                time.sleep(FRAME_TIME - elapsed_time)
+            elapsed_ms = (time.perf_counter() - loop_start) * 1000
+            frame_times.append(elapsed_ms)
+            if len(frame_times) > 30:
+                frame_times.pop(0)
+            avg_ms = sum(frame_times) / len(frame_times)
+            if avg_ms < 20:
+                remaining = 20 - avg_ms
+                if remaining > 1 and remaining < 50:
+                    time.sleep(remaining / 1000.0)
 
     except KeyboardInterrupt:
         print("[!] Kullanıcı tarafından durduruldu.")
@@ -150,6 +165,7 @@ def main():
         if 'engine' in locals(): engine.stop()
         if 'db' in locals(): db.stop()
         if 'voice' in locals(): voice.stop()
+        if 'lidar' in locals(): lidar.stop()
         cv2.destroyAllWindows()
 
 if __name__ == "__main__":

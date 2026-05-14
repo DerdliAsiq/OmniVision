@@ -1,19 +1,19 @@
 import os
 import sys
 import difflib
+import io
+import time
+import threading
+import logging
+import speech_recognition as sr
+from config import SystemState
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
 os.environ["PYTHONUTF8"] = "1"
 os.environ["LANG"] = "en_US.UTF-8"
 os.environ["LC_ALL"] = "en_US.UTF-8"
-
-import io
-import time
-import threading
-import subprocess
-import logging
-import speech_recognition as sr
-from config import SystemState
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+import pygame
 
 try:
     from faster_whisper import WhisperModel, download_model
@@ -28,6 +28,12 @@ class OmniVoice:
         self.is_running = False
         self.model = None
         
+        try:
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+        except:
+            pass
+        
         if WhisperModel is None:
             logger.error("[X] faster-whisper paketi eksik! Ses motoru başlatılamadı.")
             return
@@ -40,18 +46,20 @@ class OmniVoice:
                 print("[!] DİKKAT: J.A.R.V.I.S. Beyin Dosyaları Eksik!")
                 print(f"[*] Faster-Whisper 'Tiny' modeli '{model_dir}' klasörüne indiriliyor...")
                 download_model("tiny", output_dir=model_dir)
-                print("[+] İndirme tamamlandı! Artık sistem %100 ÇEVRİMDIŞI çalışacak.")
+                print("[+] İndirme tamamlandı. Sistem ÇEVRİMDIŞI çalışacak.")
                 print("="*60 + "\n")
 
-            logger.info(f"[*] J.A.R.V.I.S. Kulakları Lokal Klasörden Yükleniyor... (CPU MODU)")
-            # Taktik 1: device="cpu" ve compute_type="int8" yapılarak VRAM tamamen boşaltıldı!
-            self.model = WhisperModel(model_dir, device="cpu", compute_type="int8")
+            logger.info("[*] Ses Motoru Yükleniyor... (Ryzen CPU Çekirdeklerine Pinleniyor)")
+            # [SIFIR HATA & VRAM İZOLASYONU] Whisper'ı GPU'dan uzak tutmak için CPU thread'leri sınırlandı.
+            self.model = WhisperModel(model_dir, device="cpu", compute_type="int8", cpu_threads=4)
             
             self.recognizer = sr.Recognizer()
-            self.recognizer.dynamic_energy_threshold = True 
+            # [WINDOWS WASAPI FIX] Sonsuz dinleme (timeout) bug'ını engellemek için statik eşik.
+            self.recognizer.dynamic_energy_threshold = False
+            self.recognizer.energy_threshold = 400 
             self.is_speaking = False 
             
-            logger.info("[+] Ses Karargahı (Voice C2) Hazır. (Kısayol: 'V' tuşu ile aktif edin)")
+            logger.info("[+] Ses Karargahı (Voice C2) Hazır.")
             
         except Exception as e:
             logger.error(f"[X] Ses motoru başlatma hatası: {e}")
@@ -60,20 +68,23 @@ class OmniVoice:
         file_path = os.path.join("c2_audio", audio_file)
         if os.path.exists(file_path):
             self.is_speaking = True 
-            process = subprocess.Popen(["mpg123", "-q", file_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
-            def wait_for_audio():
-                process.wait()
-                time.sleep(0.5) 
-                self.is_speaking = False
+            try:
+                sound = pygame.mixer.Sound(file_path)
+                sound.play()
                 
-            threading.Thread(target=wait_for_audio, daemon=True).start()
+                def wait_for_audio():
+                    time.sleep(sound.get_length() + 0.2)
+                    self.is_speaking = False
+                    
+                threading.Thread(target=wait_for_audio, daemon=True).start()
+            except Exception as e:
+                logger.error(f"Ses çalma hatası: {e}")
+                self.is_speaking = False
         else:
             logger.warning(f"[!] Ses mühimmatı eksik: {file_path}")
 
     def start(self):
-        if self.model is None:
-            return
+        if self.model is None: return
         self.is_running = True
         threading.Thread(target=self._listen_loop, daemon=True).start()
 
@@ -88,8 +99,9 @@ class OmniVoice:
                 
             try:
                 with sr.Microphone(sample_rate=16000) as source:
-                    self.recognizer.adjust_for_ambient_noise(source, duration=1.0)
-                    print("\n[🎙️] MİKROFON AKTİF: Dinleniyor... (Stealth Mod Kapalı)")
+                    # Windows'ta ortam gürültüsüne adaptasyon süresini kısalttık
+                    self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                    print("\n[🎙️] MİKROFON AKTİF (Stealth Mod Kapalı)")
                     
                     while self.is_running and SystemState.VOICE_COMMANDS_ACTIVE:
                         if self.is_speaking:
@@ -105,11 +117,8 @@ class OmniVoice:
                         except Exception:
                             time.sleep(0.5)
             except Exception as e:
-                logger.error(f"[X] Mikrofon donanımına erişilemedi: {e}")
+                logger.error(f"[X] Mikrofon hatası: {e}")
                 time.sleep(1)
-            
-            if self.is_running:
-                print("\n[🔇] MİKROFON KAPALI: Sistem sağırlaştırıldı (Stealth Mod Aktif).")
 
     def _fuzzy_match_intent(self, text):
         wake_words = ["alfa", "alpha", "halfa", "arfa", "aysa", "alpa", "alza", "asa", "aza", "alf"]
@@ -122,14 +131,12 @@ class OmniVoice:
                 is_awake = True
                 break
                 
-        if not is_awake:
-            return None
+        if not is_awake: return None
             
         clean_words = [word for word in words if word not in wake_words]
         clean_text = " ".join(clean_words)
         
-        if len(clean_words) == 0 or len(clean_text) < 3:
-            return "LISTENING"
+        if len(clean_words) == 0 or len(clean_text) < 3: return "LISTENING"
 
         def match_any(targets, cutoff=0.8):
             for t in targets:
@@ -139,7 +146,6 @@ class OmniVoice:
             
         has_alarm = match_any(["alarm", "alarım", "alarmi", "alarmı", "aktir"])
         has_panel = match_any(["panel", "paneli", "planeli", "ekran", "arayüz", "phaneli"])
-        
         is_active = match_any(["aktif", "aç", "açı", "başlat"])
         is_inactive = match_any(["kapat", "gizle", "gizli", "devre", "durdur"])
         
@@ -150,7 +156,6 @@ class OmniVoice:
         
         if not has_alarm and not has_panel and not is_active and not is_inactive:
             return "LISTENING"
-        
         return "UNKNOWN"
 
     def _process_audio(self, audio):
@@ -165,28 +170,18 @@ class OmniVoice:
                 language="tr",
                 vad_filter=True,
                 vad_parameters=dict(min_silence_duration_ms=500),
-                initial_prompt="Alfa paneli aç. Alfa paneli gizle. Alfa alarm aktif. Alfa alarmı kapat."
+                initial_prompt="Alfa paneli aç. Alfa paneli gizle. Alfa alarm aktif."
             )
             
-            text_parts = []
-            for segment in segments:
-                try:
-                    text_parts.append(segment.text)
-                except Exception:
-                    continue
-                    
-            raw_text = " ".join(text_parts).strip().lower()
+            raw_text = " ".join([segment.text for segment in segments]).strip().lower()
             
-            if not raw_text or "komut" in raw_text or "anlaşılamadı" in raw_text:
-                return
+            if not raw_text or "komut" in raw_text or "anlaşılamadı" in raw_text: return
             
-            print(f"\n[🎧 RÖNTGEN - SİSTEM BUNU DUYDU] -> {raw_text}")
-            
+            print(f"\n[🎧 SİSTEM DUYDU] -> {raw_text}")
             intent = self._fuzzy_match_intent(raw_text)
             
             if intent:
-                print(f"[🗣️ ALFA UYANDI: NİYET TESPİT EDİLDİ -> {intent}]")
-                
+                print(f"[🗣️ NİYET TESPİT EDİLDİ -> {intent}]")
                 if intent == "ALARM_ON":
                     SystemState.ALARM_MODE = True
                     self.play_feedback("alarm_on.mp3")
@@ -203,6 +198,5 @@ class OmniVoice:
                     self.play_feedback("listening.mp3")
                 elif intent == "UNKNOWN":
                     self.play_feedback("error.mp3")
-
         except Exception as e:
-            pass
+            logger.error(f"Ses komut işleme hatası: {e}")
