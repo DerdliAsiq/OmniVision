@@ -23,7 +23,7 @@ class SystemState:
     ACTIVE_TARGET_NAMES = []
     SHOW_PERFORMANCE = True
     AI_RESOLUTION = 640
-    LOITER_THRESHOLD = 5
+    LOITER_THRESHOLD = 300
 
     C2_USERNAME = os.getenv("C2_USERNAME", "admin")
     C2_PASSWORD = os.getenv("C2_PASSWORD", "1234")
