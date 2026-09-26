@@ -8,7 +8,7 @@ https://omnivision-q8xdmnay.manus.space/
 
 OmniVision, kritik tesislerin ve operasyonel sahaların otonom gözetlenmesi için geliştirilmiş, son teknoloji hibrit bir yapay zeka platformudur. DerdliAsiq tarafından açık kaynak dünyasına kazandırılan bu sistem; düşük gecikmeli nesne takibi, dinamik çevre güvenliği ve donanım hızlandırmalı analiz katmanlarını bir araya getirerek, gözetim ve güvenlik operasyonlarını yeni bir boyuta taşır.
 
-V1.2 güncellemeleriyle birlikte OmniVision, yerel bir tespit yazılımı olmaktan çıkarak, tam asenkron çalışan **C2 (Command & Control) Web Terminali** ile donatılmış gerçek bir uzaktan komuta merkezine dönüşmüştür. Bu sayede, operasyonel verimlilik ve durumsal farkındalık en üst düzeye çıkarılmıştır.
+V2.0 güncellemeleriyle birlikte OmniVision, yerel bir tespit yazılımı olmaktan çıkarak, tam asenkron çalışan **C2 (Command & Control) Web Terminali** ile donatılmış gerçek bir uzaktan komuta merkezine dönüşmüştür. Bu sayede, operasyonel verimlilik ve durumsal farkındalık en üst düzeye çıkarılmıştır.
 
 ## 🚀 Öne Çıkan Taktiksel Özellikler
 
@@ -19,7 +19,7 @@ OmniVision, sahadaki zorlu koşullar için özel olarak tasarlanmış bir dizi y
 *   **Kinetik Flaşör (Target Lock-on):** Radara giren tehditleri izlerken "tünel vizyonunu" önleyen çoklu tarama mimarisi. Seçili hedeflerin üzerine saniyede 6 kez Kırmızı/Siyah çakar (strobe) efekti ve taktiksel nişangah atarak operatörün dikkatini doğrudan merkeze çeker ve hızlı müdahale sağlar.
 *   **Dinamik Hedef Seçim Radarı (Tkinter):** 80 farklı COCO sınıfı arasında anlık filtreleme yapabilen, A-Z alfabetik sıralı ve "Demir Hafızalı" (önceki seçimleri unutmayan) taktiksel hedef arayüzü. Bu sayede operatörler, ilgi alanlarına göre hedefleri kolayca belirleyebilir.
 *   **Akıllı Ses Kilidi (Smart Audio Lock):** Subprocess tabanlı akıllı alarm motoru. CPU'yu boğan kör döngüler yerine, seslerin üst üste binmesini (%0 overlap) fiziksel olarak engelleyen I/O optimizasyonu ile kesintisiz ve etkili sesli uyarılar sunar.
-*   **Horizon Scanner (Ufuk Çizgisi Motoru):** İnsansız Deniz Araçları (İDA) ve stabil olmayan kameralar için dinamik ufuk çizgisi tespiti yapar. Gökyüzünü ROI (Region of Interest) alanından çıkararak işlemci gücünü maksimize eder ve yanlış alarmları minimize eder.
+*   **Horizon Scanner (Ufuk Çizgisi Motoru) — Yol Haritası:** İnsansız Deniz Araçları (İDA) ve stabil olmayan kameralar için dinamik ufuk çizgisi tespiti hedeflenmektedir (henüz implemente edilmedi). Gökyüzünü ROI alanından çıkararak işlemci gücünü maksimize etmeyi ve yanlış alarmları minimize etmeyi amaçlar.
 
 ## ⚙️ Donanım Uyumluluk Matrisi
 
@@ -30,7 +30,7 @@ OmniVision, "Edge AI" prensipleriyle kodlanmış olup, donanım sınırlarını 
 | **CPU** | Cortex-A76 (Optimized)    | AMD Ryzen 5 7535HS (3.3 GHz - 4.4GHz Turbo) |
 | **GPU / NPU** | XNNPACK / Arm Neon        | NVIDIA RTX 2050 4GB GDDR6 (64 bit - CUDA) |
 | **RAM / Disk** | 8 GB LPDDR4X              | 16 GB DDR5 / 512 GB M2 NVMe SSD      |
-| **YOLO Modeli** | YOLOv8n (Nano) / INT8     | YOLOv8x (Extra Large)                |
+| **YOLO Modeli** | yolo26n (Nano) / INT8     | yolo26x (Extra Large, kanonik)                |
 | **Performans** | 15-25 FPS (Gerçek Zamanlı) | 60-90 FPS (Saf Donanım Optimizasyonu) |
 | **Ağ Gecikmesi** | < 45ms                    | Milisaniye Seviyesi (Olay Odaklı Akış) |
 
@@ -50,8 +50,14 @@ cd OmniVision
 python3 -m venv venv
 source venv/bin/activate 
 
-# Python bağımlılıklarını yükleyin
+# Python bağımlılıklarını yükleyin (Karargah/CUDA için)
 pip install -r requirements.txt
+
+# Saha (Raspberry Pi 5 / CPU) için bunun yerine:
+# pip install -r requirements-pi.txt
+
+# YOLO model ağırlığını önceden indirin (ilk çalışmada otomatik iner)
+python download_model.py
 
 # Ana uygulamayı (ve arka plandaki Web Sunucusunu) başlatın
 python main.py
@@ -69,17 +75,39 @@ Uygulama başladığında arka planda FastAPI sunucusu otomatik olarak devreye g
 Operasyonel verimliliği artırmak için fiziksel klavye kısayolları:
 
 *   `[S]` : Hedef Seçim Radarını Aç (Tkinter Arayüzü)
+*   `[C]` : Görüntü Kaynağı Menüsü (Kamera / Video_Analiz / RTSP / YouTube ayrı sekmeler)
+*   `[Space]` : Duraklat/Devam (video + canlı)
+*   `[,]` / `[.]` : -5sn / +5sn (sadece video + indirilmiş YouTube-VOD; canlıda yok)
 *   `[A]` : Alarm Sistemini Devreye Sok / Devreden Çıkar
 *   `[D]` : OmniVision HUD Gizle/Göster
 *   `[T]` : ByteTrack Hedef İzleme (Trace) Aç/Kapat
-*   `[H]` : Dinamik Ufuk Çizgisi (Horizon Scan) Aç/Kapat
+*   `[V]` : Sesli Komutları (Voice C2) Aç/Kapat
+*   `[H]` : Debug overlay Aç/Kapat
+*   `[Z]` : Sanal Çit (Polygon Zone) Aç/Kapat
+*   `[L]` : LiDAR/Sonar Aç/Kapat
+*   `[P]` : Performans metriklerini Aç/Kapat
 *   `[Q]` : Operasyonu Güvenli Şekilde Sonlandır
+
+> `Video_Analiz/` klasörüne attığınız `.mp4/.avi/.mov/.mkv` videolar `[C]` menüsünden seçilip sonsuz döngüde analiz edilir (PTS saatli, takılmasız). RTSP (`rtsp://...`, düşük gecikme/TCP, seek yok) ve YouTube menüde ayrıdır: VOD otomatik `_yt_<id>.mp4` indirilip loop+seek ile oynatılır, LIVE direkt oynatılır (seek yok). YouTube için `pip install yt-dlp` + Node.js LTS gerekir (`winget install OpenJS.NodeJS.LTS`). ALARM kanıtları `evidence_captures/`'a yazılmaya devam eder.
+
+## 🎙️ Sesli Komutlar (Voice C2)
+
+`[V]` ile dinleme açıldıktan sonra her komut **`alfa` uyandırma kelimesiyle** başlamalıdır (örn. *"alfa alarm aktif"*). Önek olmadan söylenenler yanıtsız kalır ve konsola not düşülür.
+
+| Komut | Etki |
+| :---- | :--- |
+| `alfa alarm aktif` | Alarm (Radar) modunu açar |
+| `alfa alarm kapat` | Alarm (Radar) modunu kapatır |
+| `alfa panel aç` | HUD panelini gösterir |
+| `alfa panel gizle` / `alfa panel kapat` | HUD panelini gizler |
+
+Gereksinim: `PyAudio` (`pip install -r requirements.txt` ile gelir). Mikrofon sorunu yaşarsanız önce `python test_mic.py` ile cihazı doğrulayın.
 
 ## 📦 Temel Python Bağımlılıkları
 
 OmniVision'ın temel işlevselliğini sağlayan ana Python kütüphaneleri:
 
-*   `ultralytics`: YOLOv8 çekirdeği için.
+*   `ultralytics`: YOLO çekirdeği için (kanonik model: `yolo26x`, bkz. `config.py: SystemState.MODEL_NAME`).
 *   `supervision`: Taktiksel çizimler ve ByteTrack izleme motoru için.
 *   `fastapi` & `uvicorn`: Asenkron Komuta Kontrol web sunucusu için.
 *   `opencv-python`: Matris işleme ve donanım hızlandırmalı MJPEG sıkıştırma için.
