@@ -1,8 +1,11 @@
-# requirements for OmniVision project
+# requirements for OmniVision project (C2 Karargah / CUDA)
+# Kurulum: pip install -r requirements.txt
+
+--extra-index-url https://download.pytorch.org/whl/cu124
 
 opencv-python
 ultralytics
-torch==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0+cu124
 psutil
 numpy
 supervision
@@ -11,3 +14,7 @@ uvicorn
 pygame
 python-dotenv
 pyserial
+SpeechRecognition
+PyAudio
+faster-whisper
+yt-dlp

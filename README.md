@@ -1,121 +1,162 @@
-# 👁️ OmniVision: Taktiksel C2 Gözetim Platformu
+# OmniVision: Tactical C2 Surveillance Platform
 
-## Web Site
+## Website
 
 https://omnivision-q8xdmnay.manus.space/
 
-## ✨ Yapay Zeka Destekli Otonom Gözetim ve Komuta Kontrol Merkezi
+## Overview
 
-OmniVision, kritik tesislerin ve operasyonel sahaların otonom gözetlenmesi için geliştirilmiş, son teknoloji hibrit bir yapay zeka platformudur. DerdliAsiq tarafından açık kaynak dünyasına kazandırılan bu sistem; düşük gecikmeli nesne takibi, dinamik çevre güvenliği ve donanım hızlandırmalı analiz katmanlarını bir araya getirerek, gözetim ve güvenlik operasyonlarını yeni bir boyuta taşır.
+OmniVision is an open-source, edge-oriented surveillance and command-and-control (C2) platform for fixed facilities and field operations. It combines real-time object detection and tracking (YOLO + ByteTrack), a tactical HUD, an async SQLite evidence pipeline, and a FastAPI web terminal for remote monitoring and control.
 
-V2.0 güncellemeleriyle birlikte OmniVision, yerel bir tespit yazılımı olmaktan çıkarak, tam asenkron çalışan **C2 (Command & Control) Web Terminali** ile donatılmış gerçek bir uzaktan komuta merkezine dönüşmüştür. Bu sayede, operasyonel verimlilik ve durumsal farkındalık en üst düzeye çıkarılmıştır.
+Maintainer: DerdliAsiq. License: MIT (see `LICENSE`).
 
-## 🚀 Öne Çıkan Taktiksel Özellikler
+Current version: `2.0` (single source: `config.py: SystemState.VERSION`). Canonical model: `yolo26x` (single source: `config.py: SystemState.MODEL_NAME`).
 
-OmniVision, sahadaki zorlu koşullar için özel olarak tasarlanmış bir dizi yenilikçi özellik sunar:
+## Features
 
-*   **C2 Web Dashboard (Uzaktan Komuta):** FastAPI tabanlı, asenkron `asyncio` motoru ile güçlendirilmiş modern kontrol paneli. Ana yapay zeka döngüsünü (OpenCV) yormadan, sıfır gecikmeli (low-latency) MJPEG canlı video akışı sağlayarak kesintisiz komuta imkanı sunar.
-*   **Anti-Sabotaj Ses Protokolü (OS Override):** Garuda Linux (PipeWire/PulseAudio) çekirdeğine doğrudan hükmeden `pactl` entegrasyonu sayesinde, ana makine fiziki olarak sessize alınsa bile uzaktan **MAX SES (OVERRIDE)** komutu ile sistemi %100 güçte tetikleme yeteneği. Bu özellik, sabotaj girişimlerine karşı kritik bir savunma katmanı oluşturur.
-*   **Kinetik Flaşör (Target Lock-on):** Radara giren tehditleri izlerken "tünel vizyonunu" önleyen çoklu tarama mimarisi. Seçili hedeflerin üzerine saniyede 6 kez Kırmızı/Siyah çakar (strobe) efekti ve taktiksel nişangah atarak operatörün dikkatini doğrudan merkeze çeker ve hızlı müdahale sağlar.
-*   **Dinamik Hedef Seçim Radarı (Tkinter):** 80 farklı COCO sınıfı arasında anlık filtreleme yapabilen, A-Z alfabetik sıralı ve "Demir Hafızalı" (önceki seçimleri unutmayan) taktiksel hedef arayüzü. Bu sayede operatörler, ilgi alanlarına göre hedefleri kolayca belirleyebilir.
-*   **Akıllı Ses Kilidi (Smart Audio Lock):** Subprocess tabanlı akıllı alarm motoru. CPU'yu boğan kör döngüler yerine, seslerin üst üste binmesini (%0 overlap) fiziksel olarak engelleyen I/O optimizasyonu ile kesintisiz ve etkili sesli uyarılar sunar.
-*   **Horizon Scanner (Ufuk Çizgisi Motoru) — Yol Haritası:** İnsansız Deniz Araçları (İDA) ve stabil olmayan kameralar için dinamik ufuk çizgisi tespiti hedeflenmektedir (henüz implemente edilmedi). Gökyüzünü ROI alanından çıkararak işlemci gücünü maksimize etmeyi ve yanlış alarmları minimize etmeyi amaçlar.
+- **Detection and tracking:** YOLO inference with configurable stride (`PROCESS_INTERVAL`), ByteTrack IDs, trace history, per-class target filtering with persistent selection ("iron memory").
+- **C2 web terminal:** FastAPI + MJPEG (`/video_feed`), log search (`/api/logs` with `q/limit/offset`), summary, CSV export, media/source control, target selection, playback and volume commands. HTTP Basic Auth on all endpoints.
+- **Evidence pipeline:** Async SQLite (`tactical_vision_v2.db` at `config.SystemState.DB_PATH`) in WAL mode, bounded queue, ALARM snapshots under `evidence_captures/`, 1-day retention with hourly purge.
+- **HUD and telemetry:** OpenCV overlay with FPS, source label, playback state, CPU/RAM diagnostics, LiDAR readout, polygon zones, strobe highlight for locked targets.
+- **Voice C2 (optional):** Offline faster-whisper (`whisper_model_local/`) with `alfa` wake word. Disabled by default; toggle at runtime.
+- **LiDAR/sonar input:** Serial readout with simulation fallback when no port is present. Displayed only when enabled.
+- **Source manager:** Camera, local video loop (`Video_Analiz/`), RTSP, generic HTTP streams, YouTube VOD (download + loop + seek) and YouTube LIVE (direct, no seek).
 
-## ⚙️ Donanım Uyumluluk Matrisi
+Horizon/skyline ROI for USV pitch/roll compensation is on the roadmap and not implemented.
 
-OmniVision, "Edge AI" prensipleriyle kodlanmış olup, donanım sınırlarını sonuna kadar kullanacak şekilde asenkronize edilmiştir. Aşağıdaki matris, sistemin farklı donanım konfigürasyonlarındaki uyumluluğunu ve performansını göstermektedir:
+## Hardware matrix
 
-| Bileşen | Uç Nokta (Raspberry Pi 5) | C2 Karargah Sistemi |
-| :------ | :------------------------ | :----------------------------------- |
-| **CPU** | Cortex-A76 (Optimized)    | AMD Ryzen 5 7535HS (3.3 GHz - 4.4GHz Turbo) |
-| **GPU / NPU** | XNNPACK / Arm Neon        | NVIDIA RTX 2050 4GB GDDR6 (64 bit - CUDA) |
-| **RAM / Disk** | 8 GB LPDDR4X              | 16 GB DDR5 / 512 GB M2 NVMe SSD      |
-| **YOLO Modeli** | yolo26n (Nano) / INT8     | yolo26x (Extra Large, kanonik)                |
-| **Performans** | 15-25 FPS (Gerçek Zamanlı) | 60-90 FPS (Saf Donanım Optimizasyonu) |
-| **Ağ Gecikmesi** | < 45ms                    | Milisaniye Seviyesi (Olay Odaklı Akış) |
+| Component | Field (Raspberry Pi 5) | HQ (reference) |
+| :-------- | :--------------------- | :------------- |
+| CPU | Cortex-A76 | AMD Ryzen 5 7535HS (3.3–4.4 GHz) |
+| GPU | XNNPACK / Arm NEON (CPU) | NVIDIA RTX 2050 4 GB (CUDA, FP16) |
+| RAM / Disk | 8 GB LPDDR4X | 16 GB DDR5 / 512 GB NVMe |
+| YOLO model | `yolo26n` Nano / INT8 (planned) | `yolo26x` (canonical) |
+| Expected | ~15–25 FPS | Depends on GPU, resolution, and stride |
 
-## 🚀 Hızlı Kurulum
-
-OmniVision'ı hızlıca kurmak ve çalıştırmak için aşağıdaki adımları takip edin. Projenin bağımlılıklarının izole bir sanal ortamda (venv) kurulması şiddetle tavsiye edilir. İşletim sistemi seviyesindeki grafik ve ses kütüphanelerinin (özellikle Garuda/Arch Linux için) yüklü olduğundan emin olun.
+## Quickstart
 
 ```shell
-# İşletim sistemi bağımlılıklarını kurun (Arch/Garuda Linux için)
+# OS deps (Arch/Garuda example)
 sudo pacman -S tk mpg123
 
-# Projeyi klonlayın
 git clone https://github.com/DerdliAsiq/OmniVision.git
 cd OmniVision
 
-# Sanal ortamı oluşturun ve aktif edin
 python3 -m venv venv
-source venv/bin/activate 
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# Python bağımlılıklarını yükleyin (Karargah/CUDA için)
+# HQ / CUDA
 pip install -r requirements.txt
 
-# Saha (Raspberry Pi 5 / CPU) için bunun yerine:
+# Field / Pi 5 / CPU-only (instead of the above)
 # pip install -r requirements-pi.txt
 
-# YOLO model ağırlığını önceden indirin (ilk çalışmada otomatik iner)
+# Pre-fetch model weights (also auto-fetched on first detector init)
 python download_model.py
 
-# Ana uygulamayı (ve arka plandaki Web Sunucusunu) başlatın
+# Run (starts OpenCV loop + web server)
 python main.py
 ```
 
-## 📡 C2 Web Terminaline Bağlantı
+Headless (no OpenCV window, web only):
 
-Uygulama başladığında arka planda FastAPI sunucusu otomatik olarak devreye girer. Aynı ağdaki herhangi bir cihazdan (Telefon/Tablet/PC) aşağıdaki adreslere giderek C2 Web Terminaline erişebilirsiniz:
+```shell
+HEADLESS=1 python main.py
+```
 
-👉 [http://localhost:8000](http://localhost:8000)
-👉 `http://<BILGISAYAR_IP_ADRESI>:8000`
+Diagnostics:
 
-## ⌨️ Taktiksel Kısayollar (Fiziksel)
+```shell
+python test_project.py
+python test_mic.py   # microphone check for Voice C2
+```
 
-Operasyonel verimliliği artırmak için fiziksel klavye kısayolları:
+## Web terminal
 
-*   `[S]` : Hedef Seçim Radarını Aç (Tkinter Arayüzü)
-*   `[C]` : Görüntü Kaynağı Menüsü (Kamera / Video_Analiz / RTSP / YouTube ayrı sekmeler)
-*   `[Space]` : Duraklat/Devam (video + canlı)
-*   `[,]` / `[.]` : -5sn / +5sn (sadece video + indirilmiş YouTube-VOD; canlıda yok)
-*   `[A]` : Alarm Sistemini Devreye Sok / Devreden Çıkar
-*   `[D]` : OmniVision HUD Gizle/Göster
-*   `[T]` : ByteTrack Hedef İzleme (Trace) Aç/Kapat
-*   `[V]` : Sesli Komutları (Voice C2) Aç/Kapat
-*   `[H]` : Debug overlay Aç/Kapat
-*   `[Z]` : Sanal Çit (Polygon Zone) Aç/Kapat
-*   `[L]` : LiDAR/Sonar Aç/Kapat
-*   `[P]` : Performans metriklerini Aç/Kapat
-*   `[Q]` : Operasyonu Güvenli Şekilde Sonlandır
+Default: `http://127.0.0.1:8000`. LAN bind requires explicit opt-in (see Configuration).
 
-> `Video_Analiz/` klasörüne attığınız `.mp4/.avi/.mov/.mkv` videolar `[C]` menüsünden seçilip sonsuz döngüde analiz edilir (PTS saatli, takılmasız). RTSP (`rtsp://...`, düşük gecikme/TCP, seek yok) ve YouTube menüde ayrıdır: VOD otomatik `_yt_<id>.mp4` indirilip loop+seek ile oynatılır, LIVE direkt oynatılır (seek yok). YouTube için `pip install yt-dlp` + Node.js LTS gerekir (`winget install OpenJS.NodeJS.LTS`). ALARM kanıtları `evidence_captures/`'a yazılmaya devam eder.
+- `GET /` — dashboard (Operations + Intelligence Archive tabs)
+- `GET /video_feed` — MJPEG stream
+- `GET /api/logs?q=&limit=100&offset=0` — threat logs (dict rows, paginated)
+- `GET /api/summary` — 24h distinct-object counts
+- `GET /api/export_csv` — CSV report
+- `GET /api/media` — local videos + playback state
+- `GET /api/classes` — model class map
+- `POST /api/command` — `toggle_alarm`, `toggle_hud`, `toggle_track`, `set_targets`, `set_source`, `play_pause`, `seek_fwd/back`, `vol_up/down/mute/max`
+- `DELETE /api/wipe` — clears logs (VACUUM) and `ALARM_*` evidence images only
 
-## 🎙️ Sesli Komutlar (Voice C2)
+## Keyboard shortcuts
 
-`[V]` ile dinleme açıldıktan sonra her komut **`alfa` uyandırma kelimesiyle** başlamalıdır (örn. *"alfa alarm aktif"*). Önek olmadan söylenenler yanıtsız kalır ve konsola not düşülür.
+| Key | Action |
+| :-- | :----- |
+| `S` | Target selection menu |
+| `C` | Source menu (camera / Video_Analiz / RTSP / YouTube) |
+| `Space` | Pause / resume |
+| `,` / `.` | −5s / +5s (seekable sources only) |
+| `A` | Alarm mode on/off |
+| `D` | HUD show/hide |
+| `T` | Tracking overlay on/off |
+| `V` | Voice C2 on/off |
+| `H` | Debug overlay on/off |
+| `Z` | Polygon zone on/off |
+| `L` | LiDAR display on/off |
+| `P` | Performance panel on/off |
+| `Q` | Clean shutdown |
 
-| Komut | Etki |
-| :---- | :--- |
-| `alfa alarm aktif` | Alarm (Radar) modunu açar |
-| `alfa alarm kapat` | Alarm (Radar) modunu kapatır |
-| `alfa panel aç` | HUD panelini gösterir |
-| `alfa panel gizle` / `alfa panel kapat` | HUD panelini gizler |
+Source behavior:
 
-Gereksinim: `PyAudio` (`pip install -r requirements.txt` ile gelir). Mikrofon sorunu yaşarsanız önce `python test_mic.py` ile cihazı doğrulayın.
+- `Video_Analiz/*.mp4|avi|mov|mkv` — infinite loop with PTS pacing.
+- RTSP (`rtsp://...`) — low-latency TCP, no seek.
+- YouTube VOD — downloaded to `Video_Analiz/_yt_<id>.mp4`, then loop + seek. Requires `yt-dlp` + Node.js LTS (`winget install OpenJS.NodeJS.LTS` on Windows).
+- YouTube LIVE — direct stream, no seek, 30 fps cap.
+- ALARM snapshots go to `evidence_captures/` and are served at `/evidence_captures/<file>`.
 
-## 📦 Temel Python Bağımlılıkları
+Tk menus run on a single dedicated service thread and are non-blocking. To disable Tk entirely and use web only: `OMNIVISION_TK=0`.
 
-OmniVision'ın temel işlevselliğini sağlayan ana Python kütüphaneleri:
+## Voice commands
 
-*   `ultralytics`: YOLO çekirdeği için (kanonik model: `yolo26x`, bkz. `config.py: SystemState.MODEL_NAME`).
-*   `supervision`: Taktiksel çizimler ve ByteTrack izleme motoru için.
-*   `fastapi` & `uvicorn`: Asenkron Komuta Kontrol web sunucusu için.
-*   `opencv-python`: Matris işleme ve donanım hızlandırmalı MJPEG sıkıştırma için.
+Enable with `[V]`, then prefix every command with the `alfa` wake word (example: `alfa alarm aktif`). Without the prefix the utterance is ignored.
 
-## 🔓 Lisans
+| Utterance | Effect |
+| :-------- | :----- |
+| `alfa alarm aktif` | Alarm on |
+| `alfa alarm kapat` | Alarm off |
+| `alfa panel aç` | Show HUD |
+| `alfa panel gizle` / `alfa panel kapat` | Hide HUD |
 
-Bu yazılım tamamen açık kaynaklıdır ve **MIT Lisansı** koşulları altında özgürce kullanılabilir, değiştirilebilir ve dağıtılabilir. Daha fazla detay için `LICENSE` dosyasına bakabilirsiniz.
+Requires `PyAudio`. If the engine reports not ready, check `pip install PyAudio` and `python test_mic.py`. Model files live in `whisper_model_local/` (not committed; fetched on first run).
 
-## 🛡️ Geliştirici Bilgisi
+## Configuration
 
-**DerdliAsiq** tarafından geliştirilen OmniVision, açık kaynak topluluğuna katkıda bulunmayı hedefleyen bir projedir. Sorularınız veya katkılarınız için lütfen GitHub deposunu ziyaret edin.
+Copy `.env.example` to `.env`:
+
+| Variable | Default | Notes |
+| :------- | :------ | :---- |
+| `C2_USERNAME` / `C2_PASSWORD` | `admin` / `1234` | Change in production. With defaults the server binds `127.0.0.1` only. |
+| `C2_ALLOW_LAN` | `0` | Set `1` to bind `0.0.0.0` (trusted LAN/VPN only, no HTTPS). |
+| `C2_PORT` | `8000` | Web port. |
+| `LIDAR_PORT` / `LIDAR_BAUD` | `auto` / `115200` | Force e.g. `COM4` or `/dev/ttyUSB0`. |
+| `PROCESS_INTERVAL` | `3` | Inference stride (1 = every frame). |
+| `OMNIVISION_TK` | `1` | `0` disables Tk menus. |
+| `HEADLESS` | `0` | `1` disables the OpenCV window. |
+
+Security notes: Basic Auth without TLS, no rate limiting — do not expose to the internet. Use LAN/VPN. `DELETE /api/wipe` is destructive (confirmation in UI + auth required).
+
+## Dependencies
+
+- `ultralytics` — YOLO core (`config.py: SystemState.MODEL_NAME`)
+- `supervision` — annotators + ByteTrack
+- `fastapi` + `uvicorn` — C2 server
+- `opencv-python` — capture, HUD, MJPEG encoding
+- `torch` — CUDA (`requirements.txt`) or CPU (`requirements-pi.txt`)
+- `faster-whisper`, `SpeechRecognition`, `PyAudio` — Voice C2
+- `pyserial`, `psutil`, `pygame`, `python-dotenv`, `yt-dlp`
+
+## Repository hygiene
+
+Not committed (see `.gitignore`): `*.pt`, `*.db*`, `whisper_model_local/`, `Video_Analiz` media, `evidence_captures` images, `venv/`. Tracked placeholders: `Video_Analiz/README.txt`, `evidence_captures/.gitkeep`.
+
+## License
+
+MIT. See `LICENSE`.

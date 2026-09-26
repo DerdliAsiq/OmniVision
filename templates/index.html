@@ -217,6 +217,28 @@
                     <select id="targetSelect" class="target-select" multiple></select>
                     <button class="cmd-btn" onclick="setTargets()">>>> HEDEFLERİ KİLİTLE <<<</button>
                 </div>
+
+                <div class="glass-panel">
+                    <h3>◎ GÖRÜNTÜ KAYNAĞI (C)</h3>
+                    <div id="srcLabel" style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--accent-cyan);margin-bottom:10px;">SRC: -</div>
+                    <select id="mediaSelect" class="target-select" style="height:110px" size="5"></select>
+                    <input id="mediaRtsp" class="search-box" style="margin-bottom:10px;" placeholder="RTSP: rtsp://ip:554/stream">
+                    <input id="mediaYt" class="search-box" style="margin-bottom:10px;" placeholder="YouTube: https://youtube.com/watch?v=...">
+                    <button class="cmd-btn" onclick="setSource()">>>> KAYNAĞA BAĞLAN <<<</button>
+                    <div id="playLabel" style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text-muted);margin:8px 0;">--:-- / --:--</div>
+                    <div class="grid-2">
+                        <button class="cmd-btn" onclick="playPause()">⏸/▶ DURAKLAT</button>
+                        <button class="cmd-btn" onclick="seekBy(-10)">◀◀ -10sn</button>
+                    </div>
+                    <div class="grid-2" style="margin-top:12px;">
+                        <button class="cmd-btn" onclick="seekBy(10)">+10sn ▶▶</button>
+                        <button class="cmd-btn" onclick="setSourceCam(0)">CAM 0</button>
+                    </div>
+                    <div class="grid-2" style="margin-top:12px;">
+                        <button class="cmd-btn" onclick="setSourceCam(1)">CAM 1</button>
+                        <button class="cmd-btn" onclick="loadMedia()">↻ YENİLE</button>
+                    </div>
+                </div>
                 
                 <div class="glass-panel">
                     <h3>🔊 SİSTEM SESİ (ANTI-SABOTAJ)</h3>
@@ -319,26 +341,37 @@
         async function fetchLogs() {
             const q = document.getElementById('searchInput').value;
             try {
-                const res = await fetch(`/api/logs?q=${encodeURIComponent(q)}`);
+                const res = await fetch(`/api/logs?q=${encodeURIComponent(q)}&limit=100`);
                 const data = await res.json();
                 const tbody = document.getElementById('tableBody');
+
+                const norm = (row) => {
+                    // Backend dict donerse key ile, eski tuple ise index ile oku.
+                    if (row && typeof row === 'object' && !Array.isArray(row)) {
+                        return { t: row.timestamp, id: row.object_id, cls: row.label, kind: row.event_type, dur: row.duration_sec, conf: row.confidence, x: row.x_center, y: row.y_center, img: row.image_path };
+                    }
+                    return { t: row[1], id: row[2], cls: row[3], kind: row[4], dur: row[5], conf: row[6], x: row[7], y: row[8], img: row[9] };
+                };
                 
-                tbody.innerHTML = data.map(row => {
+                tbody.innerHTML = data.map(r0 => {
+                    const row = norm(r0);
                     let badgeClass = "bg-std";
-                    if(row[4] === "ANOMALY") badgeClass = "bg-ano";
-                    if(row[4] === "ALARM") badgeClass = "bg-alr";
+                    if(row.kind === "ANOMALY") badgeClass = "bg-ano";
+                    if(row.kind === "ALARM") badgeClass = "bg-alr";
                     
-                    const imgPath = row[9];
-                    const imgLink = imgPath ? `<a href="/${imgPath.split('/').pop().split('\\\\').pop()}" target="_blank" class="kanit-btn">📸 GÖR</a>` : "-";
+                    const imgPath = row.img;
+                    // Backend mutlak yol saklar; statik mount noktasi /evidence_captures'tir.
+                    const fname = imgPath ? String(imgPath).split(/[/\\]/).pop() : "";
+                    const imgLink = fname ? `<a href="/evidence_captures/${fname}" target="_blank" class="kanit-btn">📸 GÖR</a>` : "-";
                     
                     return `
                     <tr>
-                        <td>${row[1]}</td><td>#${row[2]}</td>
-                        <td style="color: var(--accent-cyan); font-weight: bold;">${row[3]}</td>
-                        <td><span class="badge ${badgeClass}">${row[4]}</span></td>
-                        <td>${row[5]}s</td>
-                        <td>%${Math.round(row[6]*100)}</td>
-                        <td>${row[7]}, ${row[8]}</td>
+                        <td>${row.t}</td><td>#${row.id}</td>
+                        <td style="color: var(--accent-cyan); font-weight: bold;">${row.cls}</td>
+                        <td><span class="badge ${badgeClass}">${row.kind}</span></td>
+                        <td>${row.dur}s</td>
+                        <td>%${Math.round(row.conf*100)}</td>
+                        <td>${row.x}, ${row.y}</td>
                         <td>${imgLink}</td>
                     </tr>
                     `;
@@ -354,7 +387,73 @@
             }
         }
 
+        async function loadMedia() {
+            try {
+                const res = await fetch('/api/media');
+                const data = await res.json();
+                const sel = document.getElementById('mediaSelect');
+                sel.innerHTML = '';
+                (data.videos || []).forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v;
+                    opt.innerText = v;
+                    sel.appendChild(opt);
+                });
+                if((data.videos || []).length === 0) {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.innerText = '(Video_Analiz bos)';
+                    sel.appendChild(opt);
+                }
+                document.getElementById('srcLabel').innerText = 'SRC: ' + (data.current_label || data.current_source || '-') + ' [' + (data.source_type || '?') + ']'
+                + (data.connecting ? '  ⏳ BAGLANIYOR: ' + (data.pending || '') : '')
+                + (data.connect_error ? '  [X] ' + String(data.connect_error).slice(-120) : '');
+                const pl = document.getElementById('playLabel');
+                if(pl) {
+                    if(data.seekable && data.dur) {
+                        pl.innerText = (data.paused ? '|| DURAKLATILDI ' : '>> OYNATILIYOR ') + Math.round(data.pos) + 'sn / ' + Math.round(data.dur) + 'sn';
+                    } else {
+                        pl.innerText = (data.paused ? '|| DURAKLATILDI' : '● CANLI') + ' (seek yok)';
+                    }
+                }
+            } catch (err) {}
+        }
+
+        async function playPause() {
+            await fetch('/api/command', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action: 'play_pause'}) });
+            loadMedia();
+        }
+
+        async function seekBy(sec) {
+            const res = await fetch('/api/command', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action: sec < 0 ? 'seek_back' : 'seek_fwd', amount: Math.abs(sec)}) });
+            if(!res.ok) { const t = await res.text(); alert('Seek yok (canli): ' + t); return; }
+            loadMedia();
+        }
+
+        async function sendSource(src) {
+            const res = await fetch('/api/command', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action: 'set_source', source: String(src)}) });
+            if(!res.ok) { const t = await res.text(); alert('Kaynak hatasi: ' + t); return; }
+            loadMedia();
+        }
+
+        async function setSource() {
+            const sel = document.getElementById('mediaSelect');
+            const rtsp = document.getElementById('mediaRtsp').value.trim();
+            const yt = document.getElementById('mediaYt').value.trim();
+            if(rtsp) { await sendSource(rtsp); return; }
+            if(yt) { await sendSource(yt); return; }
+            const v = sel.value;
+            if(!v) { alert('Once video secin veya URL girin!'); return; }
+            await sendSource(v);
+            // Backend dosya adini Video_Analiz icinde cozer.
+            loadMedia();
+        }
+
+        async function setSourceCam(i) { await sendSource(String(i)); }
+
         loadClasses();
+        loadMedia();
+        setInterval(loadMedia, 5000);
     </script>
 </body>
 </html>

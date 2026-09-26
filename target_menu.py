@@ -1,9 +1,46 @@
+import threading
 import tkinter as tk
 from config import SystemState
+import tk_policy
+
+# Menü mainloop'u bloklayici oldugu icin ayri thread'de acilir (bkz. main.py).
+# Ayni anda tek pencere acik olabilir (medya menusuyle ortak politika).
+_menu_lock = threading.Lock()
+_menu_open = False
 
 def open_target_menu():
+    """Taktiksel Hedef Seçim Paneli (Arama ve Demir Hafıza Entegreli)
+
+    Non-blocking: istek Tk servis thread'ine kuyruklanir, video dongusu
+    bloklanmaz. Tum Tk isi ayni thread'de olur (thread-affinity fix).
+    """
+    if not tk_policy.tk_enabled():
+        print("[!] Tk kapali (OMNIVISION_TK=0). Web panelinden hedef secin.")
+        return False
+    with _menu_lock:
+        if _menu_open:
+            print("[!] Hedef menüsü zaten açık.")
+            return False
+        if tk_policy.is_active():
+            print("[!] Baska bir menu acik, once onu kapatin.")
+            return False
+        _menu_open = True
+
+    def _job():
+        try:
+            _open_target_menu_blocking()
+        finally:
+            with _menu_lock:
+                globals()["_menu_open"] = False
+
+    return tk_policy.submit(_job)
+
+
+def _open_target_menu_blocking():
     """Taktiksel Hedef Seçim Paneli (Arama ve Demir Hafıza Entegreli)"""
     root = tk.Tk()
+    root._after_ids = []
+    tk_policy.register(root)
     root.title("OMNIVISION - HEDEF KONTROL PANELİ")
     root.geometry("450x600")
     root.attributes('-topmost', True) # Her zaman en üstte kal
@@ -15,7 +52,14 @@ def open_target_menu():
     current_displayed_ids = []
 
     # Sınıfları ID'ye göre değil, A'dan Z'ye alfabetik olarak sırala
-    class_map = SystemState.MODEL_CLASSES
+    class_map = SystemState.MODEL_CLASSES or {}
+    if not class_map:
+        import tkinter.messagebox as _mb
+        try:
+            _mb.showwarning("OmniVision", "Model siniflari henuz hazir degil (detector baslamadi).")
+        except Exception:
+            pass
+        print("[!] MODEL_CLASSES bos, hedef menusu bos acilacak.")
     sorted_classes = sorted(class_map.items(), key=lambda x: x[1].lower())
 
     # --- ARAYÜZ BİLEŞENLERİ ---
@@ -27,7 +71,7 @@ def open_target_menu():
     
     tk.Label(search_frame, text="[ ARAMA ]:", font=("Courier", 12, "bold"), bg="#121212", fg="#00ffff").pack(side=tk.LEFT)
     
-    search_var = tk.StringVar()
+    search_var = tk_policy.track_var(root, tk.StringVar(master=root))
     search_entry = tk.Entry(search_frame, textvariable=search_var, font=("Courier", 12, "bold"), 
                             bg="#1e1e1e", fg="#ffffff", insertbackground="white", relief=tk.FLAT)
     search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 0))
@@ -72,13 +116,18 @@ def open_target_menu():
 
     # Tetikleyicileri Bağla
     listbox.bind('<<ListboxSelect>>', on_select)
-    search_var.trace_add("write", update_list) # Klavyeye her basıldığında listeyi güncelle
+    root._trace_pairs = []
+    try:
+        _tid = search_var.trace_add("write", update_list) # Klavyeye her basıldığında listeyi güncelle
+        root._trace_pairs.append((search_var, _tid))
+    except Exception:
+        pass
 
     # --- ONAY VE KİLİTLEME ---
     def apply_selection():
         SystemState.ACTIVE_TARGET_IDS = list(selected_memory)
         SystemState.ACTIVE_TARGET_NAMES = [class_map[cid].upper() for cid in SystemState.ACTIVE_TARGET_IDS]
-        root.destroy() # Arayüzü kapat, karargaha dön
+        tk_policy.safe_close(root, getattr(root, "_after_ids", None), getattr(root, "_trace_pairs", None)) # Arayüzü kapat, karargaha dön
 
     btn = tk.Button(root, text=">>> HEDEFLERİ KİLİTLE <<<", command=apply_selection, 
                     bg="#8b0000", fg="white", font=("Courier", 14, "bold"), relief=tk.FLAT)
@@ -87,4 +136,7 @@ def open_target_menu():
     # Başlangıçta listeyi tam doldur
     update_list()
 
-    root.mainloop()
+    try:
+        root.mainloop()
+    finally:
+        tk_policy.safe_close(root, getattr(root, "_after_ids", None), getattr(root, "_trace_pairs", None))

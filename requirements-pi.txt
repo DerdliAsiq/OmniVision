@@ -1,0 +1,21 @@
+# requirements for OmniVision project (Saha / Raspberry Pi 5 - ARM64, CPU only)
+# Kurulum: pip install -r requirements-pi.txt
+# NOT: CUDA index YOK - Pi 5'te CPU torch kullanilir.
+
+--index-url https://download.pytorch.org/whl/cpu
+
+opencv-python
+ultralytics
+torch
+psutil
+numpy
+supervision
+fastapi
+uvicorn
+pygame
+python-dotenv
+pyserial
+SpeechRecognition
+PyAudio
+faster-whisper
+yt-dlp

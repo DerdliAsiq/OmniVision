@@ -10,6 +10,13 @@ import threading
 import time
 from pathlib import Path
 
+# Windows konsolu (cp1254) ✓/✗ sembollerinde patlar; ciktiyi UTF-8'e zorla.
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 logging.basicConfig(
     level=logging.INFO,
     format='[%(levelname)s] %(message)s'
@@ -76,15 +83,52 @@ class ValidationSuite:
                 logger.info("✓ numpy available")
             except ImportError:
                 raise AssertionError("numpy not found")
+
+            try:
+                import supervision
+                logger.info("✓ supervision available")
+            except ImportError:
+                raise AssertionError("supervision not found")
+
+            try:
+                import fastapi
+                logger.info("✓ fastapi available")
+            except ImportError:
+                raise AssertionError("fastapi not found")
+
+            try:
+                import speech_recognition
+                logger.info("✓ SpeechRecognition available")
+            except ImportError:
+                raise AssertionError("SpeechRecognition not found (pip install -r requirements.txt)")
+
+            try:
+                import faster_whisper
+                logger.info("✓ faster-whisper available")
+            except ImportError:
+                raise AssertionError("faster-whisper not found (pip install -r requirements.txt)")
+
+            try:
+                import pyaudio
+                logger.info("✓ PyAudio available")
+            except ImportError:
+                logger.warning("⚠ PyAudio not found (mikrofon calismaz; pip install PyAudio) - opsiyonel, test gecildi")
         return _
     
     @property
     def test_2(self):
-        @self.test("Model Files: Verify YOLO model files exist")
+        @self.test("Model Files: Verify YOLO model files exist (or downloader present)")
         def _():
-            model_file = self.project_root / "yolo26x.pt"
-            assert model_file.exists(), f"yolo26x.pt not found at {model_file}"
-            logger.info(f"✓ yolo26x.pt found ({model_file.stat().st_size / 1e6:.1f} MB)")
+            sys.path.insert(0, str(self.project_root))
+            from config import SystemState
+            model_file = self.project_root / f"{SystemState.MODEL_NAME}.pt"
+            downloader = self.project_root / "download_model.py"
+            if model_file.exists():
+                logger.info(f"✓ {model_file.name} found ({model_file.stat().st_size / 1e6:.1f} MB)")
+            elif downloader.exists():
+                logger.warning(f"⚠ {model_file.name} henuz indirilmemis; 'python download_model.py' ile indirilebilir (test gecildi).")
+            else:
+                raise AssertionError(f"{model_file.name} not found and download_model.py missing")
         return _
     
     @property
@@ -97,6 +141,13 @@ class ValidationSuite:
                 logger.info(f"✓ config.py loaded successfully")
                 assert hasattr(SystemState, 'TRACKING_ACTIVE'), "Missing TRACKING_ACTIVE"
                 assert hasattr(SystemState, 'SHOW_DASHBOARD'), "Missing SHOW_DASHBOARD"
+                assert hasattr(SystemState, 'VERSION'), "Missing VERSION (tek kaynak versiyon)"
+                assert hasattr(SystemState, 'MODEL_NAME'), "Missing MODEL_NAME (kanonik model)"
+                assert hasattr(SystemState, 'EVIDENCE_DIR'), "Missing EVIDENCE_DIR"
+                assert hasattr(SystemState, 'DB_PATH'), "Missing DB_PATH (mutlak DB yolu)"
+                assert hasattr(SystemState, 'PROCESS_INTERVAL'), "Missing PROCESS_INTERVAL"
+                assert hasattr(SystemState, 'C2_ALLOW_LAN'), "Missing C2_ALLOW_LAN"
+                assert os.path.isabs(str(SystemState.DB_PATH)), "DB_PATH mutlak olmali"
             except ImportError as e:
                 raise AssertionError(f"Cannot import config: {e}")
         return _
@@ -172,16 +223,32 @@ class ValidationSuite:
     def test_7(self):
         @self.test("Code Quality: Verify fixes for critical issues")
         def _():
+            import re
             detector_file = self.project_root / "omni_detector.py"
             detector_source = detector_file.read_text(encoding="utf-8")
-            
+
             assert "processed_frame" in detector_source, "Detection loop not fixed"
-            
+
+            # ultralytics>=8.4: 'half' kaldirildi, 'quantize' kullanilmali
+            assert "half=self.use_half" not in detector_source, "Deprecated 'half' kwarg still passed to YOLO"
+            assert "use_half" not in detector_source, "Stale 'use_half' attribute still present"
+            assert "quantize=self.quantize" in detector_source, "YOLO calls must pass 'quantize'"
+
             engine_file = self.project_root / "omni_engine.py"
             engine_source = engine_file.read_text(encoding="utf-8")
             assert "BUFFERSIZE, 5" in engine_source or "set(cv2.CAP_PROP_BUFFERSIZE, 5)" in engine_source, "Buffer size not increased"
-            
-            assert "join(timeout=5)" in engine_source, "thread.join() missing timeout"
+
+            assert re.search(r"join\(timeout=\d+(\.\d+)?\)", engine_source), "thread.join() missing timeout"
+
+            # Yeni duzeltmeler: F1 bug, DB mutlak yol, copy-on-read
+            main_src = (self.project_root / "main.py").read_text(encoding="utf-8")
+            assert "ord('h')" in main_src or 'ord("h")' in main_src, "DEBUG hotkey H'ye tasinmali (F1/cv2 bug)"
+            assert "0x70" not in main_src or "ord('h')" in main_src, "Eski 0x70 F1 kontrolu kalmis"
+            assert "DB_PATH" in (self.project_root / "config.py").read_text(encoding="utf-8"), "DB_PATH tek kaynak olmali"
+            assert "get_frame" in engine_source and ".copy()" in engine_source, "get_frame copy-on-read olmali"
+            dash_src = (self.project_root / "tactical_web_dashboard.py").read_text(encoding="utf-8")
+            assert "shell=True" not in dash_src, "shell=True kalmis (pactl)"
+            assert "Bilinmeyen komut" in dash_src, "API unknown-action validasyonu eksik"
         return _
     
     @property
@@ -190,6 +257,10 @@ class ValidationSuite:
         def _():
             req_file = self.project_root / "requirements.txt"
             assert req_file.exists(), "requirements.txt not found"
+            pi_file = self.project_root / "requirements-pi.txt"
+            assert pi_file.exists(), "requirements-pi.txt not found"
+            pi_src = pi_file.read_text(encoding="utf-8")
+            assert "torch --index-url" not in pi_src, "requirements-pi.txt pip syntax hatasi"
         return _
     
     @property

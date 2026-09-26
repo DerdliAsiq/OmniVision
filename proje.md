@@ -18,11 +18,11 @@ Proje çift donanım mimarisi felsefesiyle geliştirilmektedir:
 * **GPU 1:** NVIDIA RTX 2050 4GB GDDR6 (CUDA - Derin öğrenme ve YOLOv8x çıkarımı için kullanılıyor)
 * **GPU 2:** AMD Radeon TM Graphics 512MB
 * **RAM & Depolama:** 16 GB DDR5 / 512 GB M.2 NVMe SSD
-* **AI Modeli (Güncel):** `yolov8x.pt` (Extra Large - RTX 2050 üzerinde maksimum zeka için).
+* **AI Modeli (Güncel):** `yolo26x.pt` (Extra Large - RTX 2050 üzerinde maksimum zeka için, kanonik model: `config.py: SystemState.MODEL_NAME`).
 
 ### 2. Hedef Ortam (Saha / İDA - İnsansız Deniz Aracı)
 * **Donanım:** Raspberry Pi 5 (ARM64 / aarch64)
-* **AI Modeli (Planlanan):** Pi 5'in işlem gücü kısıtlamaları nedeniyle sahaya inildiğinde model `yolov8n.pt` (Nano) veya INT8 kuantizasyonlu NCNN formatına dönüştürülerek kullanılacak.
+* **AI Modeli (Planlanan):** Pi 5'in işlem gücü kısıtlamaları nedeniyle sahaya inildiğinde model `yolo26n.pt` (Nano) veya INT8 kuantizasyonlu NCNN formatına dönüştürülerek kullanılacak.
 
 ---
 
@@ -37,8 +37,9 @@ Sistemin ana döngüsü. Thread'leri başlatır, FPS hesaplamasını (`time.time
 * **Görevi:** Asenkron görüntü yakalama.
 * **Detay:** Görüntü okuma işlemini kendi içinde bir Thread (iş parçacığı) olarak çalıştırır. `cv2.CAP_V4L2` (Pi 5 için) ve standart okumayı otomatik algılar. Çözünürlük 1280x720'dir. Frame dropları engellemek için `BUFFERSIZE=5` olarak ayarlanmıştır. IP kameraları (`http://ip:port/video`) destekler. Aynalama (`cv2.flip`) içerir.
 
-### 3. `horizon_engine.py` (Dinamik Ufuk Çizgisi)
-* **Görevi:** İDA'nın dalgalardaki pitch/roll hareketlerinde ufuk çizgisini bulmak.
+### 3. `horizon_engine.py` (Dinamik Ufuk Çizgisi) — ⚠️ HENÜZ IMPLEMENTE EDİLMEDİ (Yol Haritası)
+* **Durum:** Bu modül kodda mevcut değildir; aşağıdaki tasarım hedefi yol haritasına taşınmıştır.
+* **Hedef:** İDA'nın dalgalardaki pitch/roll hareketlerinde ufuk çizgisini bulmak.
 * **Detay:** CPU tasarrufu için görüntüyü küçültür. Gaussian Blur, Canny Edge (50-150) ve HoughLinesP kullanılarak ufuk tespiti yapar. Gökyüzünü atlayarak YOLO'ya sadece deniz yüzeyini (ROI) gönderir. Dalga toleransı için 15-165 derece dışındaki çizgileri filtreler.
 
 ### 4. `omni_detector.py` (Yapay Zeka & Taktik Çizim)
@@ -51,7 +52,7 @@ Sistemin ana döngüsü. Thread'leri başlatır, FPS hesaplamasını (`time.time
 
 ### 6. `omni_database.py` (Asenkron İstihbarat Loglama)
 * **Görevi:** Tehditleri SQLite veritabanına kaydetmek.
-* **Detay:** Veritabanı adı `tactical_vision.db`. Ana programı yavaşlatmamak için `queue.Queue()` ve `threading` kullanır. Database lock (kilitlenme) hatalarını önlemek için `PRAGMA journal_mode=WAL;` modunda çalışır. Zaman damgası, nesne ID, etiket, güven skoru ve merkez X/Y koordinatlarını kaydeder.
+* **Detay:** Veritabanı adı `tactical_vision_v2.db` (mutlak yol: `config.SystemState.DB_PATH`). Ana programı yavaşlatmamak için `queue.Queue()` ve `threading` kullanır. Database lock (kilitlenme) hatalarını önlemek için `PRAGMA journal_mode=WAL;` modunda çalışır. Zaman damgası, nesne ID, etiket, güven skoru ve merkez X/Y koordinatlarını kaydeder.
 
 ### 7. `tactical_web_dashboard.py` (Web Arayüzü)
 * **Görevi:** FastAPI tabanlı, tarayıcı üzerinden erişilebilen modern log izleme merkezi.
@@ -68,9 +69,13 @@ Sistemin ana döngüsü. Thread'leri başlatır, FPS hesaplamasını (`time.time
 * `q` : Sistemi güvenli kapat.
 * `d` : Sağdaki Dashboard'u aç / kapat.
 * `t` : AI Nesne Takibi ve Çizimleri (Tracking) aç / kapat.
-* `l` : LiDAR simülasyonunu aç / kapat.
+* `v` : Sesli komutları (Voice C2) aç / kapat.
 * `p` : Performans metriklerini (CPU/RAM/FPS) aç / kapat.
-* `h` : Ufuk Çizgisi tespitini ve ROI kesimini aç / kapat (İşlemci tasarruf modu).
+* `a` : Alarm (Radar) modunu aç / kapat.
+* `s` : Hedef Seçim Menüsünü aç (ayrı thread'de, videoyu dondurmaz).
+* `z` : Sanal Çit (Polygon Zone) aç / kapat.
+* `l` : LiDAR/Sonar simülasyonunu aç / kapat.
+* `h` : Debug overlay aç / kapat.
 
 ---
 

@@ -21,7 +21,11 @@ class TacticalUI:
         self.font = cv2.FONT_HERSHEY_SIMPLEX
         self.alert_font = cv2.FONT_HERSHEY_DUPLEX
         self.panel_width = 380
-        self.alarm_file = "alarm.mp3"
+        try:
+            from config import SystemState as _SS
+            self.alarm_file = os.path.join(str(_SS.BASE_DIR), "alarm.mp3")
+        except Exception:
+            self.alarm_file = "alarm.mp3"
         
         self.CLR_BG = (18, 18, 18)
         self.CLR_ACCENT = (255, 191, 0)
@@ -83,13 +87,18 @@ class TacticalUI:
         footer_h = 45
         cv2.rectangle(canvas, (0, h - footer_h), (w + self.panel_width, h), (10, 10, 10), -1)
         cv2.line(canvas, (0, h - footer_h), (w + self.panel_width, h - footer_h), (40, 40, 40), 1)
-        controls = "[Q] ABORT | [S] TARGETS | [A] ALARM | [D] HUD | [T] TRACK | [V] VOICE | [Z] ZONE | [L] LiDAR | [F1] DEBUG"
+        controls = "[Q] ABORT | [S] TARGETS | [C] MEDIA | [Space] PAUSE | [,/.] SEEK | [A] ALARM | [D] HUD | [T] TRACK | [V] VOICE | [Z] ZONE | [L] LiDAR | [F1] DEBUG"
         ts = cv2.getTextSize(controls, self.font, 0.4, 1)[0]
         cv2.putText(canvas, controls, ((w + self.panel_width - ts[0]) // 2, h - 18), self.font, 0.4, self.CLR_SUBTEXT, 1, cv2.LINE_AA)
 
         return canvas
 
     def draw_dashboard(self, frame, fps, engine=None, inference_ms=0):
+        # Engine'in paylasilan frame'ini mutate etme: kopya uzerinde calis.
+        try:
+            frame = frame.copy()
+        except Exception:
+            pass
         h, w = frame.shape[:2]
         elapsed = time.time() - self.start_time
         self.pulse_val = (np.sin(elapsed * 5) + 1) / 2 
@@ -110,15 +119,59 @@ class TacticalUI:
             cv2.putText(frame, warn_msg, (tx, ty), self.alert_font, 1.0, (255,255,255), 2, cv2.LINE_AA)
 
         cv2.putText(frame, f"{int(fps)} FPS", (w - 95, 25), self.font, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+        try:
+            src_label = engine.get_source_label() if engine is not None and hasattr(engine, "get_source_label") else ""
+        except Exception:
+            src_label = ""
+        if not src_label:
+            try:
+                src_label = str(SystemState.CURRENT_SOURCE_LABEL)
+            except Exception:
+                src_label = ""
+        if src_label:
+            if len(src_label) > 42:
+                src_label = src_label[:39] + "..."
+            cv2.putText(frame, f"SRC: {src_label}", (10, 45), self.font, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
+        # Baglanti durumu: async geciste son iyi frame + banner (donma yerine bilgi).
+        try:
+            connecting = bool(getattr(SystemState, "CONNECTING", False))
+            connecting_label = str(getattr(SystemState, "CONNECTING_LABEL", "") or "")[:40]
+        except Exception:
+            connecting = False
+            connecting_label = ""
+        if connecting:
+            msg = f"BAGLANIYOR: {connecting_label}" if connecting_label else "BAGLANIYOR..."
+            ts = cv2.getTextSize(msg, self.font, 0.7, 2)[0]
+            tx, ty = (w - ts[0]) // 2, 110
+            cv2.rectangle(frame, (tx - 15, ty - 32), (tx + ts[0] + 15, ty + 12), (0, 0, 0), -1)
+            cv2.putText(frame, msg, (tx, ty), self.font, 0.7, (0, 255, 255), 2, cv2.LINE_AA)
+        # Playback durumu: pause rozeti + seekable pozisyon.
+        try:
+            paused = bool(SystemState.PLAY_PAUSED)
+            seekable = bool(getattr(SystemState, "SEEKABLE", False))
+        except Exception:
+            paused = False
+            seekable = False
+        if paused:
+            cv2.putText(frame, "|| PAUSED (Space)", (10, 68), self.font, 0.55, (0, 255, 255), 2, cv2.LINE_AA)
+        elif seekable:
+            try:
+                pos = float(getattr(SystemState, "PLAY_POS_SEC", 0.0))
+                dur = float(getattr(SystemState, "PLAY_DUR_SEC", 0.0))
+                if dur > 0:
+                    cv2.putText(frame, f"{pos:.0f}/{dur:.0f}s [,/.]", (10, 68), self.font, 0.5, (180, 180, 180), 1, cv2.LINE_AA)
+            except Exception:
+                pass
         if SystemState.DEBUG_MODE:
             cv2.putText(frame, "DEBUG", (10, 25), self.font, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
 
         if not SystemState.SHOW_DASHBOARD:
             return frame
 
-        if self.static_canvas is None or self.last_dim != (h, w):
+        cache_key = (h, w, bool(SystemState.SHOW_PERFORMANCE))
+        if self.static_canvas is None or self.last_dim != cache_key:
             self.static_canvas = self._build_static_canvas(h, w)
-            self.last_dim = (h, w)
+            self.last_dim = cache_key
 
         canvas = self.static_canvas.copy()
         canvas[0:h, 0:w] = frame
@@ -127,7 +180,11 @@ class TacticalUI:
         x_off = panel_x + 25
         
         cv2.putText(canvas, "OMNIVISION", (x_off, 35), self.font, 0.75, self.CLR_ACCENT, 2, cv2.LINE_AA)
-        cv2.putText(canvas, "TACTICAL OS v2.1", (x_off + 155, 35), self.font, 0.4, self.CLR_SUBTEXT, 1, cv2.LINE_AA)
+        try:
+            _ver = str(SystemState.VERSION)
+        except Exception:
+            _ver = "2.0"
+        cv2.putText(canvas, f"TACTICAL OS v{_ver}", (x_off + 155, 35), self.font, 0.4, self.CLR_SUBTEXT, 1, cv2.LINE_AA)
         cv2.putText(canvas, datetime.now().strftime("%Y-%m-%d  %H:%M:%S"), (x_off, 65), self.font, 0.4, self.CLR_SUBTEXT, 1, cv2.LINE_AA)
         
         targets = ", ".join(SystemState.ACTIVE_TARGET_NAMES) if SystemState.ACTIVE_TARGET_NAMES else "CLEAR"
@@ -167,13 +224,25 @@ class TacticalUI:
         if SystemState.SHOW_PERFORMANCE:
             cv2.putText(canvas, f"ENGINE FPS: {int(fps)}", (x_off, 440), self.font, 0.45, self.CLR_NEON_G, 1, cv2.LINE_AA)
             def draw_bar(y_pos, label, val, clr):
+                try:
+                    v = max(0.0, min(100.0, float(val)))
+                except Exception:
+                    v = 0.0
                 cv2.putText(canvas, label, (x_off, y_pos - 10), self.font, 0.4, self.CLR_SUBTEXT, 1, cv2.LINE_AA)
                 cv2.rectangle(canvas, (x_off, y_pos), (x_off + 240, y_pos + 8), (40, 40, 40), -1)
-                cv2.rectangle(canvas, (x_off, y_pos), (x_off + int((val/100)*240), y_pos + 8), clr, -1)
-                cv2.putText(canvas, f"{int(val)}%", (x_off + 250, y_pos + 8), self.font, 0.4, clr, 1, cv2.LINE_AA)
+                cv2.rectangle(canvas, (x_off, y_pos), (x_off + int((v/100)*240), y_pos + 8), clr, -1)
+                cv2.putText(canvas, f"{int(v)}%", (x_off + 250, y_pos + 8), self.font, 0.4, clr, 1, cv2.LINE_AA)
             
-            draw_bar(485, "CPU LOAD", psutil.cpu_percent(), self.CLR_ACCENT)
-            draw_bar(530, "MEMORY", psutil.virtual_memory().percent, self.CLR_NEON_G)
+            try:
+                cpu_v = psutil.cpu_percent(interval=None)
+            except Exception:
+                cpu_v = 0.0
+            try:
+                mem_v = psutil.virtual_memory().percent
+            except Exception:
+                mem_v = 0.0
+            draw_bar(485, "CPU LOAD", cpu_v, self.CLR_ACCENT)
+            draw_bar(530, "MEMORY", mem_v, self.CLR_NEON_G)
 
         if SystemState.DEBUG_MODE:
             read_ms = engine.frame_read_time if engine else 0

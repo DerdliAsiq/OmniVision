@@ -7,14 +7,33 @@ __pycache__/
 # Yapay Zeka Ağırlık Dosyaları
 *.pt
 *.onnx
+*.engine
 yolov26x.onnx
+whisper_model_local/
+!whisper_model_local/.gitkeep
+*.bin
 # Veritabanı ve Yerel Loglar
 *.db
+*.db-shm
+*.db-wal
+
+# Video analiz dosyalari (buyuk dosyalar repoya girmesin)
+Video_Analiz/*.mp4
+Video_Analiz/*.avi
+Video_Analiz/*.mov
+Video_Analiz/*.mkv
+Video_Analiz/_yt_*.mp4
+!Video_Analiz/README.txt
+
+# Kanit fotograflari yerelde kalir, repoya girmez
+evidence_captures/*.jpg
+evidence_captures/*.jpeg
+evidence_captures/*.png
+!evidence_captures/.gitkeep
 
 # Güvenlik ve Sırlar
 token.txt
 .env
-*.bin
 *.key
 *.pem
 *.crt
@@ -22,7 +41,6 @@ token.txt
 *.log
 *.tmp
 *.bak
-*.onnx
 *.h5
 *.ckpt
 *.zip

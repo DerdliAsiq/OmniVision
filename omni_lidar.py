@@ -18,18 +18,29 @@ class OmniLidar:
         self.ser = None
 
     def _find_serial_port(self):
+        # Env ile zorlanabilir: LIDAR_PORT=COM4 / /dev/ttyUSB0 / auto
+        try:
+            forced = str(getattr(SystemState, "LIDAR_PORT", "auto") or "auto").strip()
+        except Exception:
+            forced = "auto"
+        if forced.lower() not in ("auto", "", "none"):
+            return forced
         if serial is None:
             return None
         try:
             ports = serial.tools.list_ports.comports()
             for p in ports:
-                if any(kw in p.description.lower() for kw in ["arduino", "cp210", "ch340", "ftdi", "usb", "serial", "lidar", "sonar"]):
+                desc = str(getattr(p, "description", "") or "").lower()
+                dev = str(getattr(p, "device", "") or "").lower()
+                if any(kw in desc for kw in ["arduino", "cp210", "ch340", "ftdi", "usb", "serial", "lidar", "sonar"]):
                     return p.device
-                if any(kw in p.device.lower() for kw in ["com", "ttyusb", "ttyama"]):
+                # Windows COM veya Linux ttyUSB/ttyACM/ttyAMA: sadece device tam eslesirse.
+                if dev.startswith("com") or "ttyusb" in dev or "ttyacm" in dev or "ttyama" in dev:
                     return p.device
         except Exception:
             pass
-        return "COM3"
+        # Port bulunamazsa None don (caller simulasyona duser), OS-spesifik tahmin yok.
+        return None
 
     def start(self):
         if serial is None:
@@ -43,10 +54,18 @@ class OmniLidar:
     def _read_loop(self):
         port = self._find_serial_port()
         try:
-            self.ser = serial.Serial(port, 115200, timeout=0.5)
-            logger.info(f"[*] Seri port bağlandı: {port}")
-        except Exception as e:
-            logger.warning(f"[!] Seri port ({port}) açılamadı: {e}. Simülasyon modu aktif.")
+            baud = int(getattr(SystemState, "LIDAR_BAUD", 115200) or 115200)
+        except Exception:
+            baud = 115200
+        if port:
+            try:
+                self.ser = serial.Serial(port, baud, timeout=0.5)
+                logger.info(f"[*] Seri port bağlandı: {port} @ {baud}")
+            except Exception as e:
+                logger.warning(f"[!] Seri port ({port}) açılamadı: {e}. Simülasyon modu aktif.")
+                self.ser = None
+        else:
+            logger.info("[*] Seri port bulunamadi, simulasyon modu aktif.")
             self.ser = None
 
         buffer = ""
@@ -62,12 +81,18 @@ class OmniLidar:
                             if line:
                                 try:
                                     distance = int(line.replace("cm", "").strip())
-                                    SystemState.LIDAR_DISTANCE = distance
+                                    # Mantik disi degerleri ele (0-5000cm aralik).
+                                    if 0 <= distance <= 5000 and SystemState.LIDAR_ACTIVE:
+                                        SystemState.LIDAR_DISTANCE = distance
                                 except ValueError:
                                     pass
                         buffer = lines[-1]
                 else:
-                    SystemState.LIDAR_DISTANCE = int((time.time() * 10) % 200 + 30)
+                    # Simulasyon sadece LIDAR aktifken state'i kirletir.
+                    if SystemState.LIDAR_ACTIVE:
+                        import random as _rnd
+                        base = int((time.time() * 10) % 200 + 30)
+                        SystemState.LIDAR_DISTANCE = max(0, base + _rnd.randint(-5, 5))
                     time.sleep(0.5)
             except Exception:
                 time.sleep(0.5)

@@ -11,8 +11,33 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("OmniVision")
 
 class OmniDatabase:
-    def __init__(self, db_name="tactical_vision_v2.db"):
-        self.db_name = db_name
+    def __init__(self, db_name=None):
+        # Tek kaynak yol: config.SystemState.DB_PATH (BASE_DIR sabitli mutlak yol).
+        # db_name verilirse BASE_DIR altinda cozulur; aksi halde DB_PATH kullanilir.
+        try:
+            base = str(SystemState.BASE_DIR)
+        except Exception:
+            base = os.path.dirname(os.path.abspath(__file__))
+        if db_name is None:
+            try:
+                self.db_name = str(SystemState.DB_PATH)
+            except Exception:
+                self.db_name = os.path.join(base, "tactical_vision_v2.db")
+        else:
+            self.db_name = db_name if os.path.isabs(db_name) else os.path.join(base, os.path.basename(db_name))
+        # Gecmis CWD-relative DB'yi mutlak yola tasi (geriye donuk uyumluluk, tek seferlik).
+        try:
+            legacy = os.path.abspath("tactical_vision_v2.db")
+            if os.path.isfile(legacy) and os.path.abspath(legacy) != os.path.abspath(self.db_name):
+                if not os.path.isfile(self.db_name):
+                    try:
+                        import shutil as _sh
+                        _sh.copy2(legacy, self.db_name)
+                        logger.info(f"[+] Legacy DB tasindi: {legacy} -> {self.db_name}")
+                    except Exception as _e:
+                        logger.warning(f"Legacy DB tasinamadi: {_e}")
+        except Exception:
+            pass
         # [GÜVENLİK - SIFIR HATA] Bellek sızıntısı ve DoS koruması: Maksimum 1000 olay tamponlanabilir.
         self.log_queue = queue.Queue(maxsize=1000)
         self.is_running = True
@@ -85,16 +110,22 @@ class OmniDatabase:
             logger.error(f"[X] Otonom imha hatası: {e}")
 
     def log_threat(self, object_id, label, event_type, duration_sec, confidence, bbox, image_path=""):
-        x_center = int((bbox[0] + bbox[2]) / 2)
-        y_center = int((bbox[1] + bbox[3]) / 2)
+        try:
+            x_center = int((float(bbox[0]) + float(bbox[2])) / 2)
+            y_center = int((float(bbox[1]) + float(bbox[3])) / 2)
+        except Exception:
+            logger.warning(f"Gecersiz bbox atlandi: {bbox}")
+            return False
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         payload = (timestamp, object_id, label, event_type, duration_sec, float(confidence), x_center, y_center, image_path)
         try:
             # Queue doluysa eski veriyi zorlama, yenisini fırlat geç (Performans önceliği)
             self.log_queue.put_nowait(payload)
+            return True
         except queue.Full:
-            logger.warning("[!] Log kuyruğu dolu, olay atlandı (performans koruması)") 
+            logger.warning("[!] Log kuyruğu dolu, olay atlandı (performans koruması)")
+            return False
 
     def _process_queue(self):
         conn = sqlite3.connect(self.db_name, timeout=10)
@@ -124,5 +155,15 @@ class OmniDatabase:
 
     def stop(self):
         self.is_running = False
-        self.worker_thread.join(timeout=3)
+        # Kapanista bekleyen loglari tahliye et (veri kaybi olmasin), en fazla ~5sn.
+        try:
+            deadline = time.time() + 5.0
+            while not self.log_queue.empty() and time.time() < deadline:
+                time.sleep(0.05)
+        except Exception:
+            pass
+        try:
+            self.worker_thread.join(timeout=5)
+        except Exception:
+            pass
         logger.info("[+] Veritabanı Bağlantısı Güvenli Şekilde Kapatıldı.")

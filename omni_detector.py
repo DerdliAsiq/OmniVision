@@ -1,10 +1,16 @@
 import logging
 import cv2
-import time  
+import time
+import warnings
 import numpy as np
 import os
 from config import SystemState
 import supervision as sv
+
+# ultralytics>=8.4 'half' parametresini kaldirdi ('quantize' kullaniliyor).
+# Asagidaki cagrilar yeni API ile yapilir; bu filtre sadece ucuncu parti
+# ic yollardan gelebilecek kalinti uyarilari susturmak icin emniyet supabidir.
+warnings.filterwarnings("ignore", message=".*'half' is deprecated.*")
 
 try:
     from ultralytics import YOLO
@@ -17,11 +23,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("OmniVision")
 
 class OmniDetector:
-    def __init__(self, base_model_name="yolo26x"):
+    def __init__(self, base_model_name=None):
+        # Kanonik model adi: config.SystemState.MODEL_NAME (tek kaynak)
+        if base_model_name is None:
+            base_model_name = SystemState.MODEL_NAME
         self.model = None
         self.track_history = {} 
-        self.frame_count = 0  
-        self.process_interval = 3  
+        self.frame_count = 0
+        try:
+            self.process_interval = max(1, int(getattr(SystemState, "PROCESS_INTERVAL", 3) or 3))
+        except Exception:
+            self.process_interval = 3
         
         self.last_detections = None
         self.last_labels = []
@@ -39,18 +51,34 @@ class OmniDetector:
         SystemState.MODEL_CLASSES = self.model.names
         
         # [VRAM OPTİMİZASYONU] RTX 2050 4GB VRAM Darboğazı Çözümü
+        # ultralytics>=8.4: FP16 icin 'half=True' yerine 'quantize=16' gecilir.
         if torch and torch.cuda.is_available():
             self.device = 0
-            self.use_half = True # FP16 Kesinlikle Açık (Bellek Tüketimi Yarıya İner)
+            self.quantize = 16 # FP16 Kesinlikle Açık (Bellek Tüketimi Yarıya İner)
             logger.info(f"[*] GPU Aktif. VRAM Tüketimi FP16 (Yarı Hassasiyet) ile optimize edildi.")
         else:
             self.device = "cpu"
-            self.use_half = False
+            self.quantize = None
             logger.warning("[!] CUDA GPU bulunamadı. Sistem CPU (Ryzen) Modunda.")
 
         logger.info(f"[*] Predator Çekirdeği Isıtılıyor (Motor: {self.device})...")
-        dummy_frame = np.zeros((SystemState.AI_RESOLUTION, SystemState.AI_RESOLUTION, 3), dtype=np.uint8)
-        self.model(dummy_frame, imgsz=SystemState.AI_RESOLUTION, device=self.device, half=self.use_half, verbose=False)
+        try:
+            dummy_frame = np.zeros((SystemState.AI_RESOLUTION, SystemState.AI_RESOLUTION, 3), dtype=np.uint8)
+            self.model(dummy_frame, imgsz=SystemState.AI_RESOLUTION, device=self.device, quantize=self.quantize, verbose=False)
+        except Exception as e:
+            # RTX 2050 4GB + XL model OOM olabilir: cozunurlugu dusurup CPU'ya dus.
+            logger.warning(f"Warmup basarisiz ({e}), 480p/CPU fallback deneniyor...")
+            try:
+                SystemState.AI_RESOLUTION = 480
+                self.device = "cpu"
+                self.quantize = None
+                dummy_frame = np.zeros((480, 480, 3), dtype=np.uint8)
+                if self.quantize is None:
+                    self.model(dummy_frame, imgsz=480, device=self.device, verbose=False)
+                else:
+                    self.model(dummy_frame, imgsz=480, device=self.device, quantize=self.quantize, verbose=False)
+            except Exception as e2:
+                raise RuntimeError(f"Model warmup basarisiz: {e2}") from e2
 
         self.tracker = sv.ByteTrack()
         self.box_annotator = sv.BoxAnnotator(thickness=2)
@@ -108,6 +136,21 @@ class OmniDetector:
 
         return processed_frame
 
+    def reset_history(self):
+        """Kaynak degisiminde eski takip ID'lerini tasiyma."""
+        self.track_history = {}
+        self.last_detections = None
+        self.last_labels = []
+        self.last_anomaly_boxes = []
+        self.last_anomaly_labels = []
+        self.last_strobe_boxes = []
+        self.last_strobe_labels = []
+        self.last_threats = []
+        try:
+            self.tracker = sv.ByteTrack()
+        except Exception:
+            pass
+
     def process(self, frame):
         self.frame_count += 1
         SystemState.IS_THREAT_DETECTED = False
@@ -115,12 +158,16 @@ class OmniDetector:
         if not SystemState.TRACKING_ACTIVE or self.model is None:
             return frame.copy(), []
 
-        # [PERFORMANS] Her karede inferance yapmayı engelle, önbellektekini çiz
+        # [PERFORMANS] Her karede inferance yapmayı engelle, önbellektekini çiz.
+        # Not: cached karelerde eski tehditler tekrar loglanmasin diye bos liste don.
         if self.frame_count % self.process_interval != 0 and self.last_detections is not None:
-            return self._draw_cached(frame), self.last_threats
+            return self._draw_cached(frame), []
 
         try:
-            results = self.model(frame, imgsz=SystemState.AI_RESOLUTION, device=self.device, half=self.use_half, conf=0.45, verbose=False)[0]
+            if self.quantize is None:
+                results = self.model(frame, imgsz=SystemState.AI_RESOLUTION, device=self.device, conf=0.45, verbose=False)[0]
+            else:
+                results = self.model(frame, imgsz=SystemState.AI_RESOLUTION, device=self.device, quantize=self.quantize, conf=0.45, verbose=False)[0]
             detections = sv.Detections.from_ultralytics(results)
             detections = self.tracker.update_with_detections(detections)
 
@@ -137,14 +184,18 @@ class OmniDetector:
             self.last_strobe_boxes, self.last_strobe_labels, self.last_threats = [], [], []
 
             if detections.tracker_id is not None:
+                # ALARM acik ama hedef secilmemisse kullaniciyi bir kez uyar.
+                if SystemState.ALARM_MODE and not SystemState.ACTIVE_TARGET_IDS and not getattr(self, "_empty_target_warned", False):
+                    logger.warning("[!] ALARM acik ama hedef listesi bos ([S] ile secin).")
+                    self._empty_target_warned = True
                 for i in range(len(detections)):
                     tracker_id = int(detections.tracker_id[i])
                     current_ids.append(tracker_id)
                     
                     if tracker_id not in self.track_history:
-                        self.track_history[tracker_id] = time.time()
+                        self.track_history[tracker_id] = time.monotonic()
                     
-                    elapsed_time = time.time() - self.track_history[tracker_id]
+                    elapsed_time = time.monotonic() - self.track_history[tracker_id]
                     class_name = results.names[detections.class_id[i]].upper()
                     confidence = float(detections.confidence[i])
                     box = detections.xyxy[i]

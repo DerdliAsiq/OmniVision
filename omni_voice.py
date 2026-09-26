@@ -27,6 +27,15 @@ class OmniVoice:
     def __init__(self):
         self.is_running = False
         self.model = None
+
+        # Mikrofon girisi icin PyAudio sart (SpeechRecognition alternatifi yok).
+        try:
+            import pyaudio  # noqa: F401
+            self.has_pyaudio = True
+        except ImportError:
+            self.has_pyaudio = False
+            print("[X] PyAudio eksik! Mikrofon calismaz. Cozum: pip install PyAudio")
+            logger.error("[X] PyAudio bulunamadi. Sesli komutlar devre disi.")
         
         try:
             if not pygame.mixer.get_init():
@@ -39,7 +48,12 @@ class OmniVoice:
             return
             
         try:
-            model_dir = "whisper_model_local"
+            from pathlib import Path as _P
+            try:
+                from config import SystemState as _SS
+                model_dir = str(_P(str(_SS.BASE_DIR)) / "whisper_model_local")
+            except Exception:
+                model_dir = "whisper_model_local"
             
             if not os.path.exists(model_dir):
                 print("\n" + "="*60)
@@ -83,8 +97,17 @@ class OmniVoice:
         else:
             logger.warning(f"[!] Ses mühimmatı eksik: {file_path}")
 
+    def is_ready(self):
+        """Sesli komut motoru goreve hazir mi? (model + PyAudio + dinleme dongusu)"""
+        return self.model is not None and self.has_pyaudio and self.is_running
+
     def start(self):
-        if self.model is None: return
+        if self.model is None:
+            logger.error("[X] Whisper modeli yuklenemedi. Sesli komutlar devre disi.")
+            return
+        if not self.has_pyaudio:
+            logger.error("[X] PyAudio eksik (pip install PyAudio). Sesli komutlar devre disi.")
+            return
         self.is_running = True
         threading.Thread(target=self._listen_loop, daemon=True).start()
 
@@ -92,22 +115,25 @@ class OmniVoice:
         self.is_running = False
 
     def _listen_loop(self):
+        fail_count = 0
         while self.is_running:
             if not SystemState.VOICE_COMMANDS_ACTIVE:
                 time.sleep(0.5)
                 continue
-                
+
             try:
+                # Mikrofonu dongu disinda TEK KEZ ac (her hatada yeniden acma).
                 with sr.Microphone(sample_rate=16000) as source:
                     # Windows'ta ortam gürültüsüne adaptasyon süresini kısalttık
                     self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                     print("\n[🎙️] MİKROFON AKTİF (Stealth Mod Kapalı)")
-                    
+                    fail_count = 0
+
                     while self.is_running and SystemState.VOICE_COMMANDS_ACTIVE:
                         if self.is_speaking:
                             time.sleep(0.1)
                             continue
-                            
+
                         try:
                             audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=5)
                             if not self.is_speaking:
@@ -117,17 +143,25 @@ class OmniVoice:
                         except Exception:
                             time.sleep(0.5)
             except Exception as e:
-                logger.error(f"[X] Mikrofon hatası: {e}")
-                time.sleep(1)
+                # Artan bekleme (backoff): log sismesini engeller, 5sn'de tavan yapar.
+                fail_count += 1
+                wait = min(1 + fail_count, 5)
+                logger.error(f"[X] Mikrofon hatası: {e} ({wait}sn sonra tekrar denenecek)")
+                time.sleep(wait)
 
     def _fuzzy_match_intent(self, text):
-        wake_words = ["alfa", "alpha", "halfa", "arfa", "aysa", "alpa", "alza", "asa", "aza", "alf"]
+        # Uyandirma kelimesi token-eslesmeli: substring "asa" gibi parcalar tetiklemesin.
+        wake_words = ["alfa", "alpha"]
+        wake_aliases = {"halfa", "arfa", "alpa", "alza"}
         
         is_awake = False
         words = text.replace(".", "").replace(",", "").replace("?", "").split()
-        
-        for w in wake_words:
-            if w in text or difflib.get_close_matches(w, words, n=1, cutoff=0.8):
+
+        for tok in words:
+            if tok in wake_words:
+                is_awake = True
+                break
+            if tok in wake_aliases or difflib.get_close_matches(tok, wake_words, n=1, cutoff=0.9):
                 is_awake = True
                 break
                 
@@ -179,6 +213,9 @@ class OmniVoice:
             
             print(f"\n[🎧 SİSTEM DUYDU] -> {raw_text}")
             intent = self._fuzzy_match_intent(raw_text)
+
+            if not intent:
+                print("[!] Uyandirma kelimesi ('alfa') algilanamadi. Ornek: 'alfa alarm aktif'")
             
             if intent:
                 print(f"[🗣️ NİYET TESPİT EDİLDİ -> {intent}]")
